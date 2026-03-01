@@ -15,7 +15,7 @@ jobs:
       sha_short: ${{ steps.vars.outputs.sha_short }}
     env:
       REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}
+      IMAGE_NAME: ccm
     steps:
       - uses: actions/checkout@v4
 
