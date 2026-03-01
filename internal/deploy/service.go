@@ -196,6 +196,9 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 }
 
 func isLikelySelfCCMStack(stack *model.CCMStack) bool {
+	if strings.EqualFold(stack.TargetID, "self") {
+		return true
+	}
 	if strings.EqualFold(stack.ID, "ccm") {
 		return true
 	}

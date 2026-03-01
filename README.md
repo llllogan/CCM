@@ -157,7 +157,7 @@ Expected health response:
 `POST /v1/compose/{id}/redeploy`:
 - Uses the stack's resolved flags (`pull`, `remove_orphans`, `recreate`).
 - For non-CCM stacks: runs compose synchronously.
-- For stack id `ccm`: starts a detached remote compose job and returns:
+- For self-targeted CCM stack (`target: self`): starts a detached remote compose job and returns:
 - `async: true`
 - `log_path` (log filename in the stack deploy directory, usually `ccm-redeploy-<stack>-<timestamp>.log`)
 - The log contains timestamped steps (`config`, `pull`, `up`, `ps`) and exit codes.
