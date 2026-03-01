@@ -157,6 +157,7 @@ body {
   flex-direction: column;
   gap: 10px;
   min-height: 0;
+  min-width: 0;
 }
 
 .header {
@@ -242,6 +243,7 @@ button:active {
 .panel {
   display: none;
   min-height: 0;
+  min-width: 0;
 }
 
 .panel-active {
@@ -256,6 +258,8 @@ button:active {
   min-height: 300px;
   max-height: 54vh;
   overflow: auto;
+  overflow-x: auto;
+  white-space: pre;
   border-top: 2px solid;
   border-color: var(--line-deep) var(--line-light) var(--line-light) var(--line-deep);
   background: #020202;
