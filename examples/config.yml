@@ -22,7 +22,6 @@ stacks:
   ccm:
     target: vm-prod
     deploy_subdir: ccm
-    profile: fast
   repo-a__service1:
     target: vm-prod
     deploy_subdir: repo-a/service1
