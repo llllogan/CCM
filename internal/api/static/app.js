@@ -88,7 +88,7 @@ async function selectItem(item) {
       ['Uptime', c.uptime],
       ['Ports', (c.ports || []).join(', ') || '-'],
       ['Container ID', c.container_id],
-      ['Target', c.target_id],
+      ['Host machine', c.target_id],
     ]);
     $('details').textContent = JSON.stringify(c, null, 2);
     startLogs(c.id);
@@ -98,7 +98,7 @@ async function selectItem(item) {
     renderStats([
       ['Project', item.name],
       ['Services', children.length],
-      ['Target', item.target_id],
+      ['Host machine', item.target_id],
       ['Status', item.status],
       ['Stack ID', item.id],
     ]);
