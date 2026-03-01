@@ -155,7 +155,8 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 	}
 
 	results := []model.CommandResult{}
-	logPath := fmt.Sprintf("ccm-redeploy-%s-%d.log", stack.ID, time.Now().Unix())
+	logFile := fmt.Sprintf("ccm-redeploy-%s-%d.log", stack.ID, time.Now().Unix())
+	logPath := logFile
 	prepareLogCmd := fmt.Sprintf("cd %q && : > %q", deployPath, logPath)
 	prepareLogRes, err := s.ssh.RunCommand(ctx, stack.TargetID, prepareLogCmd, 10*time.Second)
 	if err != nil {
@@ -163,14 +164,25 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 	}
 	results = append(results, prepareLogRes)
 	if prepareLogRes.ExitCode != 0 {
-		msg := strings.TrimSpace(prepareLogRes.Stderr)
-		if msg == "" {
-			msg = strings.TrimSpace(prepareLogRes.Stdout)
+		// Some hosts mount deploy paths read-only for the SSH user; fall back to /tmp.
+		fallbackPath := path.Join("/tmp", logFile)
+		fallbackCmd := fmt.Sprintf(": > %q", fallbackPath)
+		fallbackRes, ferr := s.ssh.RunCommand(ctx, stack.TargetID, fallbackCmd, 10*time.Second)
+		if ferr != nil {
+			return nil, false, "", ferr
 		}
-		if msg == "" {
-			msg = "unknown error preparing log file"
+		results = append(results, fallbackRes)
+		if fallbackRes.ExitCode != 0 {
+			msg := strings.TrimSpace(fallbackRes.Stderr)
+			if msg == "" {
+				msg = strings.TrimSpace(fallbackRes.Stdout)
+			}
+			if msg == "" {
+				msg = "unknown error preparing log file"
+			}
+			return results, false, "", fmt.Errorf("prepare redeploy log fallback %q failed: %s", fallbackPath, msg)
 		}
-		return results, false, "", fmt.Errorf("prepare redeploy log %q: %s", path.Join(deployPath, logPath), msg)
+		logPath = fallbackPath
 	}
 
 	script := buildRedeployScript(stack, logPath)
