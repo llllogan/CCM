@@ -258,8 +258,6 @@ button:active {
   min-height: 300px;
   max-height: 54vh;
   overflow: auto;
-  overflow-x: auto;
-  white-space: pre;
   border-top: 2px solid;
   border-color: var(--line-deep) var(--line-light) var(--line-light) var(--line-deep);
   background: #020202;
@@ -272,6 +270,8 @@ button:active {
 #details {
   background: #f8f8f8;
   color: #141414;
+  overflow-x: auto;
+  white-space: pre;
 }
 
 .statusbar {
