@@ -1,6 +1,7 @@
 let inventory = [];
 let selected = null;
 let stream = null;
+let streamContainerID = null;
 let paused = false;
 const composeChildrenByID = {};
 const expandedCompose = new Set();
@@ -115,17 +116,46 @@ function renderStats(items) {
   $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
 }
 
-function stopLogs() {
+function setStreamIndicator(state) {
+  const dot = $('streamDot');
+  if (!dot) return;
+  dot.classList.remove('is-active', 'is-inactive', 'is-connecting');
+  if (state === 'active') {
+    dot.classList.add('is-active');
+    dot.title = 'Log stream connected';
+    return;
+  }
+  if (state === 'connecting') {
+    dot.classList.add('is-connecting');
+    dot.title = 'Log stream reconnecting';
+    return;
+  }
+  dot.classList.add('is-inactive');
+  dot.title = 'Log stream disconnected';
+}
+
+function stopLogs({ clearSelection = true } = {}) {
   if (stream) {
     stream.close();
     stream = null;
   }
+  setStreamIndicator('inactive');
+  if (clearSelection) {
+    streamContainerID = null;
+  }
 }
 
-function startLogs(id) {
-  stopLogs();
-  $('logs').textContent = '';
+function startLogs(id, { resetOutput = true } = {}) {
+  streamContainerID = id;
+  stopLogs({ clearSelection: false });
+  if (resetOutput) {
+    $('logs').textContent = '';
+  }
+  setStreamIndicator('connecting');
   stream = new EventSource(`/v1/containers/${encodeURIComponent(id)}/logs/stream?tail=200`);
+  stream.onopen = () => {
+    setStreamIndicator('active');
+  };
   stream.onmessage = (evt) => {
     if (paused) return;
     $('logs').textContent += evt.data + '\n';
@@ -134,8 +164,17 @@ function startLogs(id) {
     }
   };
   stream.onerror = () => {
+    setStreamIndicator('inactive');
     $('logs').textContent += '[stream error or disconnected]\n';
   };
+}
+
+function reconnectLogsIfNeeded() {
+  if (document.hidden) return;
+  if (!streamContainerID) return;
+  if (selected?.type !== 'container') return;
+  if (stream) return;
+  startLogs(streamContainerID, { resetOutput: false });
 }
 
 async function ensureComposeChildren(composeID) {
@@ -254,7 +293,16 @@ function tickClock() {
   $('clock').textContent = now.toLocaleTimeString();
 }
 
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopLogs({ clearSelection: false });
+    return;
+  }
+  reconnectLogsIfNeeded();
+});
+
 (async function init() {
+  setStreamIndicator('inactive');
   tickClock();
   setInterval(tickClock, 1000);
   await fetchInventory();

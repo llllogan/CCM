@@ -56,8 +56,21 @@ body {
 .title-dot {
   width: 10px;
   height: 10px;
-  background: #2eff2e;
+  background: #7f7f7f;
   border: 1px solid #043100;
+  transition: background-color 120ms ease;
+}
+
+.title-dot.is-connecting {
+  background: #ffd447;
+}
+
+.title-dot.is-active {
+  background: #2eff2e;
+}
+
+.title-dot.is-inactive {
+  background: #7f7f7f;
 }
 
 .titlebar-right {
