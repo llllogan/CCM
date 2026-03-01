@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CCM Raw Logs</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #000; color: #0f0; font-family: monospace; }
+    pre { margin: 0; padding: 8px; white-space: pre; overflow: auto; height: 100vh; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <pre id="out"></pre>
+  <script>
+    const out = document.getElementById('out');
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    const tail = params.get('tail') || '200';
+
+    if (!id) {
+      out.textContent = 'missing container id';
+      throw new Error('missing container id');
+    }
+
+    const es = new EventSource(`/v1/containers/${encodeURIComponent(id)}/logs/stream?tail=${encodeURIComponent(tail)}`);
+    es.onmessage = (evt) => {
+      out.textContent += evt.data + '\n';
+      out.scrollTop = out.scrollHeight;
+    };
+    es.onerror = () => {
+      out.textContent += '[stream error or disconnected]\n';
+    };
+  </script>
+</body>
+</html>

@@ -185,6 +185,28 @@ $('btnPause').onclick = () => {
 $('btnClear').onclick = () => {
   $('logs').textContent = '';
 };
+$('btnCopyLast100').onclick = async () => {
+  const lines = $('logs').textContent.split('\n').filter(Boolean);
+  const tail = lines.slice(-100).join('\n');
+  if (!tail) {
+    setActionResult('No log lines to copy.', true);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(tail + '\n');
+    setActionResult(`Copied ${Math.min(100, lines.length)} log lines.`);
+  } catch (err) {
+    setActionResult(`Copy failed: ${err?.message || String(err)}`, true);
+  }
+};
+$('btnPopoutRaw').onclick = () => {
+  if (selected?.type !== 'container') {
+    setActionResult('Select a container first.', true);
+    return;
+  }
+  const url = `/raw-logs.html?id=${encodeURIComponent(selected.id)}&tail=200`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
 $('btnStart').onclick = async () => {
   if (selected?.type !== 'container') {
     setActionResult('Select a container first.', true);
