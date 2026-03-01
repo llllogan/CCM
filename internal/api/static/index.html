@@ -3,51 +3,71 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CCM</title>
+  <title>CCM Console</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar">
-      <h1>CCM</h1>
-      <input id="search" placeholder="Search containers/stacks" />
-      <div id="items" class="items"></div>
-    </aside>
-    <main class="main">
-      <header class="header">
-        <div>
-          <h2 id="title">Select an item</h2>
-          <div id="subtitle" class="muted">No target selected</div>
+  <div class="desktop-bg">
+    <div class="window-shell">
+      <div class="titlebar">
+        <div class="titlebar-left">
+          <span class="title-dot"></span>
+          <strong>Central Container Manager</strong>
         </div>
-        <span id="status" class="badge">idle</span>
-      </header>
+        <div class="titlebar-right">CCM.EXE</div>
+      </div>
 
-      <section class="stats" id="stats"></section>
+      <div class="app">
+        <aside class="sidebar panel-frame">
+          <div class="panel-title">Navigator</div>
+          <label class="field-label" for="search">Find:</label>
+          <input id="search" placeholder="container, stack, target" />
+          <div id="items" class="items"></div>
+        </aside>
 
-      <section class="actions">
-        <button id="btnStart">Start</button>
-        <button id="btnStop">Stop</button>
-        <button id="btnRestart">Restart</button>
-        <button id="btnRedeploy">Redeploy</button>
-      </section>
+        <main class="main panel-frame">
+          <header class="header">
+            <div>
+              <h1 id="title">Select an item</h1>
+              <div id="subtitle" class="muted">No target selected</div>
+            </div>
+            <span id="status" class="badge">idle</span>
+          </header>
 
-      <section class="tabs">
-        <button data-tab="logs" class="tab active">Logs</button>
-        <button data-tab="details" class="tab">Details</button>
-      </section>
+          <section class="stats" id="stats"></section>
 
-      <section id="panelLogs" class="panel panel-active">
-        <div class="log-controls">
-          <button id="btnPause">Pause</button>
-          <button id="btnClear">Clear</button>
-          <label><input type="checkbox" id="autoScroll" checked /> Auto-scroll</label>
-        </div>
-        <pre id="logs" class="logs"></pre>
-      </section>
-      <section id="panelDetails" class="panel">
-        <pre id="details"></pre>
-      </section>
-    </main>
+          <section class="actions">
+            <button id="btnStart">Start</button>
+            <button id="btnStop">Stop</button>
+            <button id="btnRestart">Restart</button>
+            <button id="btnRedeploy">Redeploy</button>
+          </section>
+
+          <section class="tabs panel-frame-inset">
+            <button data-tab="logs" class="tab active">Logs</button>
+            <button data-tab="details" class="tab">Details</button>
+          </section>
+
+          <section id="panelLogs" class="panel panel-active panel-frame-inset">
+            <div class="log-controls">
+              <button id="btnPause">Pause</button>
+              <button id="btnClear">Clear</button>
+              <label><input type="checkbox" id="autoScroll" checked /> Auto-scroll</label>
+            </div>
+            <pre id="logs" class="logs"></pre>
+          </section>
+
+          <section id="panelDetails" class="panel panel-frame-inset">
+            <pre id="details"></pre>
+          </section>
+        </main>
+      </div>
+
+      <div class="statusbar">
+        <div class="status-segment">CCM Ready</div>
+        <div class="status-segment" id="clock">--:--:--</div>
+      </div>
+    </div>
   </div>
   <script src="/app.js"></script>
 </body>
