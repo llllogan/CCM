@@ -159,7 +159,8 @@ Expected health response:
 - For non-CCM stacks: runs compose synchronously.
 - For stack id `ccm`: starts a detached remote compose job and returns:
 - `async: true`
-- `log_path` (remote log file, usually `/tmp/ccm-redeploy-<timestamp>.log`)
+- `log_path` (log filename in the stack deploy directory, usually `ccm-redeploy-<stack>-<timestamp>.log`)
+- The log contains timestamped steps (`config`, `pull`, `up`, `ps`) and exit codes.
 
 This protects self-redeploy from dying mid-request while CCM restarts.
 
@@ -188,7 +189,8 @@ If `ccm` does not come back after redeploy:
 1. Check that `pull` is enabled for stack `ccm` in `/etc/ccm/config.yml`.
 2. On the Docker host, inspect the detached redeploy log:
 ```bash
-tail -n 200 /tmp/ccm-redeploy-*.log
+cd /opt/ccm
+tail -n 200 ccm-redeploy-*.log
 ```
 3. Check compose state:
 ```bash

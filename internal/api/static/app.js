@@ -292,8 +292,14 @@ $('btnRedeploy').onclick = async () => {
   const redeployURL = `/v1/compose/${encodeURIComponent(selected.id)}/redeploy`;
   try {
     setActionResult('Redeploying...');
-    await post(redeployURL);
-    setActionResult('Redeploy complete.');
+    const out = await post(redeployURL);
+    if (out?.async && out?.log_path) {
+      setActionResult(`Redeploy started in background. Log: ${out.log_path}`);
+    } else if (out?.log_path) {
+      setActionResult(`Redeploy complete. Log: ${out.log_path}`);
+    } else {
+      setActionResult('Redeploy complete.');
+    }
     await fetchInventory();
   } catch (err) {
     const msg = err?.message || String(err);

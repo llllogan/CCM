@@ -155,16 +155,18 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 	}
 
 	results := []model.CommandResult{}
-	checkCmd := fmt.Sprintf("cd %q && docker compose config -q", deployPath)
-	checkRes, err := s.ssh.RunCommand(ctx, stack.TargetID, checkCmd, 30*time.Second)
+	logPath := fmt.Sprintf("ccm-redeploy-%s-%d.log", stack.ID, time.Now().Unix())
+	script := buildRedeployScript(stack, logPath)
+	detachCmd := fmt.Sprintf("cd %q && nohup sh -c %s < /dev/null > /dev/null 2>&1 &", deployPath, strconv.Quote(script))
+	detachRes, err := s.ssh.RunCommand(ctx, stack.TargetID, detachCmd, 15*time.Second)
 	if err != nil {
 		return nil, false, "", err
 	}
-	results = append(results, checkRes)
-	if checkRes.ExitCode != 0 {
-		return results, false, "", nil
-	}
+	results = append(results, detachRes)
+	return results, true, logPath, nil
+}
 
+func buildRedeployScript(stack *model.CCMStack, logPath string) string {
 	up := "docker compose up -d"
 	if stack.Flags.RemoveOrphans {
 		up += " --remove-orphans"
@@ -172,18 +174,48 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 	if strings.EqualFold(stack.Flags.Recreate, "force") {
 		up += " --force-recreate"
 	}
-	script := up
+	pullLine := ""
 	if stack.Flags.Pull {
-		script = "docker compose pull && " + up
+		pullLine = `
+log "Running: docker compose pull"
+docker compose pull
+rc=$?
+log "docker compose pull exit=$rc"
+if [ "$rc" -ne 0 ]; then
+  log "Redeploy failed during pull"
+  exit "$rc"
+fi
+`
 	}
-	logPath := fmt.Sprintf("/tmp/ccm-redeploy-%d.log", time.Now().Unix())
-	detachCmd := fmt.Sprintf("cd %q && nohup sh -c %s > %q 2>&1 < /dev/null &", deployPath, strconv.Quote(script), logPath)
-	detachRes, err := s.ssh.RunCommand(ctx, stack.TargetID, detachCmd, 15*time.Second)
-	if err != nil {
-		return nil, false, "", err
-	}
-	results = append(results, detachRes)
-	return results, true, logPath, nil
+
+	return fmt.Sprintf(`LOG_PATH=%s
+log() { printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "$1"; }
+{
+  log "Redeploy started"
+  log "Working directory: $(pwd)"
+  log "Flags: pull=%t remove_orphans=%t recreate=%s"
+  log "Running: docker compose config -q"
+  docker compose config -q
+  rc=$?
+  log "docker compose config exit=$rc"
+  if [ "$rc" -ne 0 ]; then
+    log "Redeploy failed during config validation"
+    exit "$rc"
+  fi
+%s
+  log "Running: %s"
+  %s
+  rc=$?
+  log "%s exit=$rc"
+  if [ "$rc" -ne 0 ]; then
+    log "Redeploy failed during up"
+    exit "$rc"
+  fi
+  log "Running: docker compose ps"
+  docker compose ps
+  log "Redeploy finished successfully"
+} >>"$LOG_PATH" 2>&1
+`, strconv.Quote(logPath), stack.ID, stack.Flags.Pull, stack.Flags.RemoveOrphans, stack.Flags.Recreate, pullLine, up, up, up)
 }
 
 func buildEnvContent(raw string, env map[string]string) (string, int, error) {
