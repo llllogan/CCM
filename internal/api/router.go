@@ -46,29 +46,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 	root, _ := fs.Sub(staticFS, "static")
 	mux.Handle("/", http.FileServer(http.FS(root)))
 
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if strings.HasPrefix(req.URL.Path, "/v1/") && req.Method != http.MethodGet && req.Method != http.MethodHead {
-			if err := r.checkAuth(req); err != nil {
-				util.WriteErr(w, http.StatusUnauthorized, err.Error())
-				return
-			}
-		}
-		mux.ServeHTTP(w, req)
-	})
-}
-
-func (r *Router) checkAuth(req *http.Request) error {
-	if strings.TrimSpace(r.cfg.AuthToken) == "" {
-		return nil
-	}
-	a := strings.TrimSpace(req.Header.Get("Authorization"))
-	if !strings.HasPrefix(a, "Bearer ") {
-		return fmt.Errorf("missing bearer token")
-	}
-	if strings.TrimSpace(strings.TrimPrefix(a, "Bearer ")) != r.cfg.AuthToken {
-		return fmt.Errorf("invalid token")
-	}
-	return nil
+	return mux
 }
 
 func (r *Router) health(w http.ResponseWriter, _ *http.Request) {

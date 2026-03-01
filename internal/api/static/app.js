@@ -152,9 +152,7 @@ async function ensureComposeChildren(composeID) {
 }
 
 async function post(url) {
-  const token = localStorage.getItem('ccm_token') || '';
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  const res = await fetch(url, { method: 'POST', headers });
+  const res = await fetch(url, { method: 'POST' });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `request failed (${res.status})`);
   return body;
@@ -174,10 +172,7 @@ async function runAction(label, fn) {
     setActionResult(`${label} complete${result && result.exit_code !== undefined ? ` (exit ${result.exit_code})` : ''}.`);
     await fetchInventory();
   } catch (err) {
-    let msg = err?.message || String(err);
-    if (msg.includes('missing bearer token') || msg.includes('invalid token')) {
-      msg += ' Set token in browser: localStorage.setItem("ccm_token","<token>")';
-    }
+    const msg = err?.message || String(err);
     setActionResult(`${label} failed: ${msg}`, true);
   }
 }

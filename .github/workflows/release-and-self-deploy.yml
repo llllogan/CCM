@@ -68,7 +68,6 @@ jobs:
       - name: Deploy via CCM API
         env:
           CCM_URL: ${{ secrets.CCM_URL }}
-          CCM_TOKEN: ${{ secrets.CCM_TOKEN }}
         run: |
           jq -n \
             --arg stack "ccm" \
@@ -78,6 +77,5 @@ jobs:
             '{ccm_stack:$stack, repo:$repo, sha:$sha, compose_yml:$compose}' > payload.json
 
           curl -fsSL -X POST "${CCM_URL}/v1/deploy" \
-            -H "Authorization: Bearer ${CCM_TOKEN}" \
             -H "Content-Type: application/json" \
             --data @payload.json

@@ -72,4 +72,5 @@ It:
 Required secrets:
 
 - `CCM_URL` (example `http://ccm.internal:8080`)
-- `CCM_TOKEN`
+
+Note: CCM currently runs without API authentication for internal-network use.
