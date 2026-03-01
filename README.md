@@ -70,6 +70,87 @@ ACME_EMAIL=you@example.com
 
 And place a Caddyfile at `/opt/ccm/Caddyfile` (or use the sample at `caddy/Caddyfile.example`).
 
+## First-time host deployment (explicit steps)
+
+If this is your first CCM install on a host, create the deployment directory and files before starting:
+
+1. Create the directory:
+```bash
+sudo mkdir -p /opt/ccm
+cd /opt/ccm
+```
+
+2. Create `docker-compose.yml`:
+```yaml
+services:
+  ccm:
+    image: ghcr.io/llllogan/ccm:latest
+    container_name: ccm
+    restart: unless-stopped
+    volumes:
+      - /etc/ccm:/etc/ccm:ro
+      - /home/logan/.ssh:/home/logan/.ssh:ro
+    environment:
+      - CCM_SSH_KEY=/home/logan/.ssh/id_ed25519
+
+  caddy:
+    image: ghcr.io/caddybuilds/caddy-cloudflare:latest
+    container_name: ccm-caddy
+    restart: unless-stopped
+    depends_on:
+      - ccm
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+3. Create `.env`:
+```bash
+cat > /opt/ccm/.env <<'EOF'
+CLOUDFLARE_API_TOKEN=replace-with-cloudflare-token
+ACME_EMAIL=you@example.com
+EOF
+```
+
+4. Create `Caddyfile`:
+```caddy
+{
+  email {$ACME_EMAIL}
+}
+
+ccm.janssen.host {
+  tls {
+    dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+  }
+  encode zstd gzip
+  reverse_proxy ccm:8080
+}
+```
+
+5. Start and verify:
+```bash
+cd /opt/ccm
+docker compose up -d
+docker compose ps
+curl -sS http://127.0.0.1:8080/healthz
+```
+
+Expected health response:
+```json
+{"status":"ok"}
+```
+
 ## UI notes
 
 - The top-left status square shows log stream state.
