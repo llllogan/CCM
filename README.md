@@ -21,6 +21,7 @@ Key rules:
 - `targets` define SSH connection and deployment roots.
 - `stacks` map stack IDs to targets and deploy subdirectories.
 - Repos should only include a pointer file, e.g. [`examples/ccm.ref.yml`](examples/ccm.ref.yml).
+- For a given stack deploy path, CCM writes `docker-compose.yml`, `Caddyfile`, and `.env` in that same directory.
 
 ## Run locally
 
@@ -34,6 +35,20 @@ go run ./cmd/ccm -config ./examples/config.yml -listen :8080
 ```bash
 docker compose up -d
 ```
+
+`docker-compose.yml` runs two services:
+
+- `ccm` app container
+- `caddy` reverse proxy with TLS for `ccm.janssen.host`
+
+Before first run, create `/opt/ccm/.env` with:
+
+```bash
+CLOUDFLARE_API_TOKEN=replace-with-cloudflare-token
+ACME_EMAIL=you@example.com
+```
+
+And place a Caddyfile at `/opt/ccm/Caddyfile` (or use the sample at `caddy/Caddyfile.example`).
 
 ## API summary
 
@@ -72,5 +87,7 @@ It:
 Required secrets:
 
 - `CCM_URL` (example `http://ccm.internal:8080`)
+- `CLOUDFLARE_API_TOKEN`
+- `ACME_EMAIL`
 
 Note: CCM currently runs without API authentication for internal-network use.

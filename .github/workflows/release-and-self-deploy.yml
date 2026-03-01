@@ -15,7 +15,7 @@ jobs:
       sha_short: ${{ steps.vars.outputs.sha_short }}
     env:
       REGISTRY: ghcr.io
-      IMAGE_NAME: llllogan/ccm
+      CCM_IMAGE_NAME: llllogan/ccm
     steps:
       - uses: actions/checkout@v4
 
@@ -33,48 +33,87 @@ jobs:
 
       - name: Build and push image
         run: |
-          IMAGE="${REGISTRY}/${IMAGE_NAME}"
-          docker build -t "${IMAGE}:${{ steps.vars.outputs.sha_short }}" -t "${IMAGE}:latest" .
-          docker push "${IMAGE}:${{ steps.vars.outputs.sha_short }}"
-          docker push "${IMAGE}:latest"
+          CCM_IMAGE="${REGISTRY}/${CCM_IMAGE_NAME}"
+
+          docker build -t "${CCM_IMAGE}:${{ steps.vars.outputs.sha_short }}" -t "${CCM_IMAGE}:latest" .
+          docker push "${CCM_IMAGE}:${{ steps.vars.outputs.sha_short }}"
+          docker push "${CCM_IMAGE}:latest"
 
   deploy:
     runs-on: [self-hosted, linux]
     needs: build-push
     env:
       REGISTRY: ghcr.io
-      IMAGE_NAME: llllogan/ccm
+      CCM_IMAGE_NAME: llllogan/ccm
     steps:
       - uses: actions/checkout@v4
 
       - name: Render compose
         run: |
-          IMAGE="${REGISTRY}/${IMAGE_NAME}:${{ needs.build-push.outputs.sha_short }}"
+          CCM_IMAGE="${REGISTRY}/${CCM_IMAGE_NAME}:${{ needs.build-push.outputs.sha_short }}"
           cat > docker-compose.rendered.yml <<EOF2
           services:
             ccm:
-              image: ${IMAGE}
+              image: ${CCM_IMAGE}
               container_name: ccm
               restart: unless-stopped
-              ports:
-                - "8080:8080"
               volumes:
                 - /etc/ccm:/etc/ccm:ro
-                - /home/deploy/.ssh:/home/ccm/.ssh:ro
+                - /home/logan/.ssh:/home/logan/.ssh:ro
               environment:
-                - CCM_SSH_KEY=/home/ccm/.ssh/id_ed25519
+                - CCM_SSH_KEY=/home/logan/.ssh/id_ed25519
+
+            caddy:
+              image: ghcr.io/caddybuilds/caddy-cloudflare:latest
+              container_name: ccm-caddy
+              restart: unless-stopped
+              depends_on:
+                - ccm
+              ports:
+                - "80:80"
+                - "443:443"
+              environment:
+                - CLOUDFLARE_API_TOKEN=\${CLOUDFLARE_API_TOKEN}
+                - ACME_EMAIL=\${ACME_EMAIL}
+              volumes:
+                - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                - caddy_data:/data
+                - caddy_config:/config
+
+          volumes:
+            caddy_data:
+            caddy_config:
+          EOF2
+
+          cat > Caddyfile.rendered <<EOF2
+          {
+            email {\$ACME_EMAIL}
+          }
+
+          ccm.janssen.host {
+            tls {
+              dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+            }
+            encode zstd gzip
+            reverse_proxy ccm:8080
+          }
           EOF2
 
       - name: Deploy via CCM API
         env:
           CCM_URL: ${{ secrets.CCM_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
         run: |
           jq -n \
             --arg stack "ccm" \
             --arg repo "${GITHUB_REPOSITORY}" \
             --arg sha "${GITHUB_SHA}" \
             --arg compose "$(cat docker-compose.rendered.yml)" \
-            '{ccm_stack:$stack, repo:$repo, sha:$sha, compose_yml:$compose}' > payload.json
+            --arg caddyfile "$(cat Caddyfile.rendered)" \
+            --arg cf_token "${CLOUDFLARE_API_TOKEN}" \
+            --arg acme_email "${ACME_EMAIL}" \
+            '{ccm_stack:$stack, repo:$repo, sha:$sha, compose_yml:$compose, caddyfile:$caddyfile, env:{CLOUDFLARE_API_TOKEN:$cf_token, ACME_EMAIL:$acme_email}}' > payload.json
 
           curl -fsSL -X POST "${CCM_URL}/v1/deploy" \
             -H "Content-Type: application/json" \

@@ -1,12 +1,31 @@
 services:
   ccm:
-    image: ghcr.io/loganjanssen/ccm:latest
+    image: ghcr.io/llllogan/ccm:latest
     container_name: ccm
     restart: unless-stopped
-    ports:
-      - "8080:8080"
     volumes:
       - /etc/ccm:/etc/ccm:ro
-      - ${HOME}/.ssh:/home/ccm/.ssh:ro
+      - /home/logan/.ssh:/home/logan/.ssh:ro
     environment:
-      - CCM_SSH_KEY=/home/ccm/.ssh/id_ed25519
+      - CCM_SSH_KEY=/home/logan/.ssh/id_ed25519
+
+  caddy:
+    image: ghcr.io/caddybuilds/caddy-cloudflare:latest
+    container_name: ccm-caddy
+    restart: unless-stopped
+    depends_on:
+      - ccm
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

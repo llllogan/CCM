@@ -1,0 +1,11 @@
+{
+  email {$ACME_EMAIL}
+}
+
+ccm.janssen.host {
+  tls {
+    dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+  }
+  encode zstd gzip
+  reverse_proxy ccm:8080
+}
