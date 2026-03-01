@@ -2,7 +2,6 @@ name: Release And Self Deploy
 
 on:
   push:
-    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +15,7 @@ jobs:
       sha_short: ${{ steps.vars.outputs.sha_short }}
     env:
       REGISTRY: ghcr.io
-      IMAGE_NAME: ccm
+      IMAGE_NAME: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
 

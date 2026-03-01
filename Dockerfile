@@ -4,7 +4,7 @@ COPY go.mod go.sum* ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/ccm ./cmd/ccm
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=mod -o /out/ccm ./cmd/ccm
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates openssh-client tzdata
