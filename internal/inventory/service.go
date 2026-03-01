@@ -193,7 +193,7 @@ func (s *Service) parseInspect(targetID, raw string) ([]model.Container, []model
 			TargetID:       targetID,
 			ComposeProject: proj,
 			Labels:         c.Config.Labels,
-			Uptime:         c.State.StartedAt,
+			Uptime:         formatUptime(c.State.StartedAt),
 		}
 		containers = append(containers, item)
 		if proj != "" {
@@ -243,4 +243,28 @@ func shortID(in string) string {
 		return in[:12]
 	}
 	return in
+}
+
+func formatUptime(startedAt string) string {
+	if strings.TrimSpace(startedAt) == "" || startedAt == "0001-01-01T00:00:00Z" {
+		return "-"
+	}
+	t, err := time.Parse(time.RFC3339Nano, startedAt)
+	if err != nil {
+		return startedAt
+	}
+	d := time.Since(t)
+	if d < 0 {
+		return "-"
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	mins := int(d.Minutes()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, mins)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, mins)
+	}
+	return fmt.Sprintf("%dm", mins)
 }
