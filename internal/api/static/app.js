@@ -2,7 +2,8 @@ let inventory = [];
 let selected = null;
 let stream = null;
 let paused = false;
-let composeChildren = [];
+const composeChildrenByID = {};
+const expandedCompose = new Set();
 
 const $ = (id) => document.getElementById(id);
 
@@ -24,9 +25,44 @@ function renderItems() {
       const row = document.createElement('div');
       row.className = 'item';
       if (selected && selected.id === item.id) row.classList.add('active');
-      row.innerHTML = `<div>${item.name}</div><div class="meta">${item.type} | ${item.target_id} | ${item.status}</div>`;
-      row.onclick = () => selectItem(item);
+      const marker = item.type === 'compose' ? (expandedCompose.has(item.id) ? '[-] ' : '[+] ') : '';
+      row.innerHTML = `<div>${marker}${item.name}</div><div class="meta">${item.type} | ${item.target_id} | ${item.status}</div>`;
+      row.onclick = async () => {
+        if (item.type === 'compose') {
+          if (expandedCompose.has(item.id)) {
+            expandedCompose.delete(item.id);
+          } else {
+            expandedCompose.add(item.id);
+            await ensureComposeChildren(item.id);
+          }
+          await selectItem(item);
+          renderItems();
+          return;
+        }
+        await selectItem(item);
+      };
       host.appendChild(row);
+
+      if (item.type === 'compose' && expandedCompose.has(item.id)) {
+        const children = composeChildrenByID[item.id] || [];
+        children.forEach((c) => {
+          const child = document.createElement('div');
+          child.className = 'item item-child';
+          if (selected && selected.id === c.id) child.classList.add('active');
+          child.innerHTML = `<div>└─ ${c.name}</div><div class="meta">${c.status} | ${c.container_id}</div>`;
+          child.onclick = async (evt) => {
+            evt.stopPropagation();
+            await selectItem({
+              type: 'container',
+              id: c.id,
+              name: c.name,
+              target_id: c.target_id,
+              status: c.status,
+            });
+          };
+          host.appendChild(child);
+        });
+      }
     });
 }
 
@@ -54,18 +90,10 @@ async function selectItem(item) {
       ['Target', c.target_id],
     ]);
     $('details').textContent = JSON.stringify(c, null, 2);
-    composeChildren = [];
-    renderServices([]);
     startLogs(c.id);
     switchTab('logs');
   } else if (item.type === 'compose') {
-    const res = await fetch(`/v1/items/${encodeURIComponent(item.id)}/children`);
-    if (!res.ok) {
-      $('details').textContent = `Failed to load compose services (${res.status})`;
-      return;
-    }
-    const children = await res.json();
-    composeChildren = children;
+    const children = await ensureComposeChildren(item.id);
     renderStats([
       ['Project', item.name],
       ['Services', children.length],
@@ -74,14 +102,11 @@ async function selectItem(item) {
       ['Stack ID', item.id],
     ]);
     $('details').textContent = JSON.stringify(children, null, 2);
-    renderServices(children);
     stopLogs();
-    switchTab('services');
+    switchTab('details');
   } else {
     renderStats([['Error', item.name]]);
     $('details').textContent = JSON.stringify(item, null, 2);
-    composeChildren = [];
-    renderServices([]);
     stopLogs();
   }
 }
@@ -113,27 +138,17 @@ function startLogs(id) {
   };
 }
 
-function renderServices(children) {
-  const host = $('services');
-  if (!children || children.length === 0) {
-    host.innerHTML = '<div class="muted">No compose services for current selection.</div>';
-    return;
+async function ensureComposeChildren(composeID) {
+  if (composeChildrenByID[composeID]) return composeChildrenByID[composeID];
+  const res = await fetch(`/v1/items/${encodeURIComponent(composeID)}/children`);
+  if (!res.ok) {
+    composeChildrenByID[composeID] = [];
+    $('details').textContent = `Failed to load compose services (${res.status})`;
+    return [];
   }
-
-  host.innerHTML = '';
-  children.forEach((c) => {
-    const btn = document.createElement('button');
-    btn.className = 'service-item';
-    btn.innerHTML = `<strong>${c.name}</strong><span class="service-meta">${c.status} | ${c.image || '-'} | ${c.container_id}</span>`;
-    btn.onclick = () => selectItem({
-      type: 'container',
-      id: c.id,
-      name: c.name,
-      target_id: c.target_id,
-      status: c.status,
-    });
-    host.appendChild(btn);
-  });
+  const children = await res.json();
+  composeChildrenByID[composeID] = children;
+  return children;
 }
 
 async function post(url) {
@@ -184,7 +199,6 @@ function tickClock() {
 (async function init() {
   tickClock();
   setInterval(tickClock, 1000);
-  renderServices([]);
   await fetchInventory();
   setInterval(fetchInventory, 4000);
 })();
