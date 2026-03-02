@@ -13,7 +13,7 @@
   --line-mid: #bac1cb;
   --line-light: #f7f9fc;
 
-  --titlebar-bg: linear-gradient(180deg, #b9bec5 0%, #9da4ad 47%, #868f9a 48%, #6c7480 100%);
+  --titlebar-bg: linear-gradient(180deg, #c6ccd3 0%, #afb7c0 20%, #959fab 49%, #7e8794 50%, #6a7380 78%, #5c6572 100%);
   --titlebar-text: #eef3f8;
   --titlebar-right-opacity: 0.88;
 
@@ -41,9 +41,9 @@
   --action-ok: #226f3a;
   --action-err: #a62424;
 
-  --button-bg: linear-gradient(180deg, #d0e5fb 0%, #80b4e6 49%, #4d90d2 50%, #3c78b6 100%);
-  --button-hover-bg: linear-gradient(180deg, #deefff 0%, #8cc1f1 49%, #5699db 50%, #4382c3 100%);
-  --button-active-bg: linear-gradient(180deg, #316da9 0%, #3f7fbb 100%);
+  --button-bg: linear-gradient(180deg, #eef7ff 0%, #c5e1fb 22%, #8dc0ee 48%, #5fa3de 49%, #3e85c5 76%, #2f6aa2 100%);
+  --button-hover-bg: linear-gradient(180deg, #f5fbff 0%, #d7ecff 22%, #9accf6 48%, #6aafe8 49%, #4a93d2 76%, #3879b4 100%);
+  --button-active-bg: linear-gradient(180deg, #2a659b 0%, #3e80bb 32%, #4f95ce 60%, #3b77af 100%);
 
   --tab-active-bg: linear-gradient(180deg, #dbeaf8 0%, #abc9e7 100%);
 
@@ -82,8 +82,21 @@ body.theme-leopard {
   border-bottom: 1px solid #555d67;
   justify-content: center;
   position: relative;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.42) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.28) inset;
   letter-spacing: 0;
+}
+
+.theme-leopard .leopard-titlebar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 48%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.08) 100%);
+  pointer-events: none;
 }
 
 .theme-leopard .leopard-traffic {
@@ -99,22 +112,44 @@ body.theme-leopard {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.35);
-  transition: background-color 120ms ease, box-shadow 120ms ease;
+  border: 1px solid rgba(0, 0, 0, 0.38);
+  position: relative;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.28), 0 1px 0 rgba(255, 255, 255, 0.22) inset;
+  transition: background-color 120ms ease, box-shadow 120ms ease, filter 120ms ease;
 }
 
-.theme-leopard .leopard-dot-close { background: #6d6564; }
-.theme-leopard .leopard-dot-min { background: #66624f; }
-.theme-leopard .leopard-dot-zoom { background: #536754; }
+.theme-leopard .leopard-dot::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 1px;
+  height: 36%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.18) 100%);
+  pointer-events: none;
+}
+
+.theme-leopard .leopard-dot-close { background: radial-gradient(circle at 35% 30%, #8c7c79 0%, #6d6564 58%, #504847 100%); }
+.theme-leopard .leopard-dot-min { background: radial-gradient(circle at 35% 30%, #867f66 0%, #66624f 58%, #4e4a3b 100%); }
+.theme-leopard .leopard-dot-zoom { background: radial-gradient(circle at 35% 30%, #6f856f 0%, #536754 58%, #3e4d3f 100%); }
 
 .theme-leopard .leopard-dot-min.is-connecting {
-  background: #febb2e;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28) inset, 0 0 8px rgba(254, 187, 46, 0.7);
+  background: radial-gradient(circle at 35% 30%, #ffe184 0%, #ffc34a 38%, #f1a61f 72%, #bb7c10 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.3) inset,
+    0 0 10px rgba(255, 192, 63, 0.85),
+    0 1px 1px rgba(0, 0, 0, 0.35);
+  filter: saturate(1.08);
 }
 
 .theme-leopard .leopard-dot-zoom.is-active {
-  background: #35c759;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28) inset, 0 0 8px rgba(53, 199, 89, 0.68);
+  background: radial-gradient(circle at 35% 30%, #8cf8a8 0%, #4fe278 38%, #2fbe53 72%, #1d8739 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.3) inset,
+    0 0 10px rgba(69, 222, 112, 0.82),
+    0 1px 1px rgba(0, 0, 0, 0.35);
+  filter: saturate(1.06);
 }
 
 .theme-leopard .leopard-stream-proxy {
@@ -218,10 +253,26 @@ body.theme-leopard {
 .theme-leopard button {
   border-radius: 15px;
   border: 1px solid #2f6a9f;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.38) inset, 0 1px 1px rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.55) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.18) inset,
+    0 1px 1px rgba(0, 0, 0, 0.18);
   padding: 6px 14px;
   color: #f2f8ff;
   text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+
+.theme-leopard button::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 2px;
+  height: 44%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0.1) 100%);
+  pointer-events: none;
 }
 
 .theme-leopard button:hover {
