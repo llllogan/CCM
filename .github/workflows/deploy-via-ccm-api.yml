@@ -74,17 +74,26 @@ jobs:
         run: |
           set -euo pipefail
 
+          curl_rc=0
           redeploy_code="$(
             curl -sS -o redeploy-response.json -w '%{http_code}' \
               -X POST "${CCM_URL}/v1/compose/ccm/redeploy" \
               -H "Content-Type: application/json"
-          )"
-          if [ "${redeploy_code}" -lt 200 ] || [ "${redeploy_code}" -ge 300 ]; then
-            echo "Self-redeploy failed with HTTP ${redeploy_code}"
+          )" || curl_rc=$?
+          if [ "${redeploy_code}" -ge 200 ] && [ "${redeploy_code}" -lt 300 ]; then
             cat redeploy-response.json
-            exit 1
+            exit 0
           fi
+
+          if [ "${redeploy_code}" = "502" ] || [ "${redeploy_code}" = "000" ] || [ "${curl_rc}" -ne 0 ]; then
+            echo "Self-redeploy request was interrupted (HTTP ${redeploy_code}, curl exit ${curl_rc}); continuing."
+            cat redeploy-response.json
+            exit 0
+          fi
+
+          echo "Self-redeploy failed with HTTP ${redeploy_code}"
           cat redeploy-response.json
+          exit 1
 
       - name: Wait 60 seconds after self-redeploy
         shell: bash
