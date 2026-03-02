@@ -115,6 +115,9 @@ func (r *Router) composeRoute(w http.ResponseWriter, req *http.Request) {
 			util.WriteErr(w, 400, err.Error())
 			return
 		}
+		if stack, ok := r.cfg.Stacks[parts[0]]; ok {
+			r.inv.InvalidateTarget(stack.TargetID)
+		}
 		util.WriteJSON(w, 200, out)
 		return
 	}
@@ -168,7 +171,18 @@ func (r *Router) containerAction(w http.ResponseWriter, req *http.Request, id, a
 		util.WriteErr(w, 400, err.Error())
 		return
 	}
+	if targetID, ok := parseTargetFromContainerID(id); ok {
+		r.inv.InvalidateTarget(targetID)
+	}
 	util.WriteJSON(w, 200, res)
+}
+
+func parseTargetFromContainerID(id string) (string, bool) {
+	parts := strings.SplitN(id, ":", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		return "", false
+	}
+	return parts[0], true
 }
 
 func (r *Router) containerLogs(w http.ResponseWriter, req *http.Request, id string) {

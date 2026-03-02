@@ -136,6 +136,12 @@ func (s *Service) putCache(targetID string, inv model.TargetInventory) {
 	s.cache[targetID] = inv
 }
 
+func (s *Service) InvalidateTarget(targetID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.cache, targetID)
+}
+
 type inspectContainer struct {
 	ID              string        `json:"Id"`
 	Name            string        `json:"Name"`
