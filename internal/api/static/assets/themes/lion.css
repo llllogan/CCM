@@ -1,0 +1,59 @@
+:root {
+  --bg: #9fb4c8;
+  --bg-radial-start: #d3deea;
+  --bg-radial-end: #7f95ab;
+
+  --window: #d8d8d8;
+  --panel: #ececec;
+  --text: #1f1f1f;
+  --muted: #5b5b5b;
+
+  --line-dark: #b9b9b9;
+  --line-deep: #8a8a8a;
+  --line-mid: #c7c7c7;
+  --line-light: #f8f8f8;
+
+  --titlebar-bg: linear-gradient(180deg, #f7f7f7 0%, #dfdfdf 45%, #c9c9c9 46%, #b3b3b3 100%);
+  --titlebar-text: #2b2b2b;
+  --titlebar-right-opacity: 0.8;
+
+  --title-dot-border: #6f6f6f;
+  --title-dot-connecting: #f5bf2f;
+  --title-dot-active: #35c759;
+  --title-dot-inactive: #9d9d9d;
+
+  --panel-title-bg: linear-gradient(180deg, #f4f4f4 0%, #d8d8d8 100%);
+  --panel-title-text: #2a2a2a;
+
+  --input-bg: #ffffff;
+  --list-bg: #fbfbfb;
+  --item-hover-bg: #dbe8f5;
+  --item-active-bg: #7ea0c4;
+  --item-active-text: #ffffff;
+  --item-active-meta: #edf5ff;
+  --item-child-bg: #f4f7fa;
+  --item-child-line: #8ca3b9;
+
+  --badge-bg: #f2f2f2;
+  --stat-bg: #f5f5f5;
+
+  --action-bg: #f4f4f4;
+  --action-ok: #2b7c2f;
+  --action-err: #a12222;
+
+  --button-bg: linear-gradient(180deg, #fefefe 0%, #ececec 100%);
+  --button-hover-bg: #f4f8fc;
+  --button-active-bg: #d9e2ec;
+
+  --tab-active-bg: #ffffff;
+
+  --logs-bg: #121212;
+  --logs-text: #84f28a;
+  --details-bg: #fcfcfc;
+  --details-text: #1f1f1f;
+
+  --status-bg: #efefef;
+
+  --font-ui: "Lucida Grande", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  --font-mono: "Menlo", "Monaco", "Courier New", monospace;
+}
