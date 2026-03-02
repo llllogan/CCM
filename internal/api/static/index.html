@@ -47,6 +47,7 @@
           <section class="tabs panel-frame-inset">
             <button data-tab="logs" class="tab active">Logs</button>
             <button data-tab="details" class="tab">Details</button>
+            <button id="tabActionLogs" data-tab="actionLogs" class="tab" hidden>Action logs</button>
           </section>
 
           <section id="panelLogs" class="panel panel-active panel-frame-inset">
@@ -62,6 +63,10 @@
 
           <section id="panelDetails" class="panel panel-frame-inset">
             <pre id="details"></pre>
+          </section>
+
+          <section id="panelActionLogs" class="panel panel-frame-inset" hidden>
+            <pre id="actionLogs" class="logs"></pre>
           </section>
         </main>
       </div>

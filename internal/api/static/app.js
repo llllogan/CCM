@@ -5,6 +5,10 @@ let streamContainerID = null;
 let paused = false;
 const composeChildrenByID = {};
 const expandedCompose = new Set();
+let actionLogName = '';
+let actionLogCountdownTimer = null;
+let actionLogCountdownRemaining = 0;
+let actionLogShouldAutoClose = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -319,17 +323,132 @@ function setActionResult(message, isError = false) {
   el.classList.add(isError ? 'err' : 'ok');
 }
 
-async function runAction(label, fn) {
+function appendActionLogLine(line) {
+  const out = $('actionLogs');
+  if (!out) return;
+  out.textContent += line + '\n';
+  out.scrollTop = out.scrollHeight;
+}
+
+function appendCommandResultToActionLogs(result, label = 'command') {
+  if (!result) return;
+  appendActionLogLine(`[${label}] exit=${result.exit_code}`);
+  const stdout = (result.stdout || '').trim();
+  if (stdout) {
+    stdout.split('\n').forEach((line) => appendActionLogLine(`[stdout] ${line}`));
+  }
+  const stderr = (result.stderr || '').trim();
+  if (stderr) {
+    stderr.split('\n').forEach((line) => appendActionLogLine(`[stderr] ${line}`));
+  }
+}
+
+function stopActionLogCountdown() {
+  if (actionLogCountdownTimer) {
+    clearInterval(actionLogCountdownTimer);
+    actionLogCountdownTimer = null;
+  }
+}
+
+function isActionLogTabActive() {
+  return document.querySelector('.tab.active')?.dataset.tab === 'actionLogs';
+}
+
+function setActionLogTabLabel() {
+  const tab = $('tabActionLogs');
+  if (!tab) return;
+  if (!actionLogShouldAutoClose || isActionLogTabActive()) {
+    tab.textContent = `${actionLogName} logs`;
+    return;
+  }
+  tab.textContent = `${actionLogName} logs (will close in ${actionLogCountdownRemaining}s)`;
+}
+
+function hideActionLogTab() {
+  stopActionLogCountdown();
+  actionLogShouldAutoClose = false;
+  actionLogCountdownRemaining = 0;
+  const tab = $('tabActionLogs');
+  const panel = $('panelActionLogs');
+  if (tab) tab.hidden = true;
+  if (panel) panel.hidden = true;
+  if (document.querySelector('.tab.active')?.dataset.tab === 'actionLogs') {
+    switchTab('logs');
+  }
+}
+
+function maybeStartActionLogCloseCountdown() {
+  if (!actionLogShouldAutoClose) return;
+  if (isActionLogTabActive()) {
+    stopActionLogCountdown();
+    setActionLogTabLabel();
+    return;
+  }
+  stopActionLogCountdown();
+  setActionLogTabLabel();
+  actionLogCountdownTimer = setInterval(() => {
+    if (isActionLogTabActive()) {
+      stopActionLogCountdown();
+      setActionLogTabLabel();
+      return;
+    }
+    actionLogCountdownRemaining -= 1;
+    if (actionLogCountdownRemaining <= 0) {
+      hideActionLogTab();
+      return;
+    }
+    setActionLogTabLabel();
+  }, 1000);
+}
+
+function queueActionLogAutoClose(seconds = 10) {
+  actionLogShouldAutoClose = true;
+  actionLogCountdownRemaining = seconds;
+  const tab = $('tabActionLogs');
+  if (!tab) return;
+  setActionLogTabLabel();
+  maybeStartActionLogCloseCountdown();
+}
+
+function showActionLogTab(actionName) {
+  stopActionLogCountdown();
+  actionLogShouldAutoClose = false;
+  actionLogCountdownRemaining = 0;
+  actionLogName = `[${actionName}]`;
+  const tab = $('tabActionLogs');
+  const panel = $('panelActionLogs');
+  if (!tab || !panel) return;
+  tab.hidden = false;
+  panel.hidden = false;
+  setActionLogTabLabel();
+  $('actionLogs').textContent = '';
+  switchTab('actionLogs');
+}
+
+async function runAction(label, fn, { showActionLogs = false } = {}) {
   try {
     setActionResult(`${label}...`);
+    if (showActionLogs) {
+      showActionLogTab(label);
+      appendActionLogLine(`[meta] ${label} started`);
+    }
     const activeTab = document.querySelector('.tab.active')?.dataset.tab;
     const result = await fn();
+    if (showActionLogs) {
+      appendCommandResultToActionLogs(result, label.toLowerCase());
+      appendActionLogLine(`[meta] ${label} complete`);
+      queueActionLogAutoClose(10);
+    }
     setActionResult(`${label} complete${result && result.exit_code !== undefined ? ` (exit ${result.exit_code})` : ''}.`);
     await fetchInventory();
     await refreshSelectedDetails();
     if (activeTab) switchTab(activeTab);
   } catch (err) {
     const msg = err?.message || String(err);
+    if (showActionLogs) {
+      appendActionLogLine(`[meta] ${label} failed: ${msg}`);
+      queueActionLogAutoClose(10);
+    }
     setActionResult(`${label} failed: ${msg}`, true);
   }
 }
@@ -411,7 +530,7 @@ $('btnRestart').onclick = async () => {
     setActionResult('Select a container first.', true);
     return;
   }
-  await runAction('Restart', () => post(`/v1/containers/${encodeURIComponent(selected.id)}/restart`));
+  await runAction('Restart', () => post(`/v1/containers/${encodeURIComponent(selected.id)}/restart`), { showActionLogs: true });
 };
 $('btnRedeploy').onclick = async () => {
   if (selected?.type !== 'compose') {
@@ -421,6 +540,12 @@ $('btnRedeploy').onclick = async () => {
   const redeployURL = `/v1/compose/${encodeURIComponent(selected.id)}/redeploy`;
   try {
     setActionResult('Redeploying...');
+    const isCCMSelfRedeploy = selected.id === 'ccm';
+    if (!isCCMSelfRedeploy) {
+      showActionLogTab('Redeploy');
+      appendActionLogLine('[meta] Redeploy started');
+      appendActionLogLine(`[meta] Stack: ${selected.id}`);
+    }
     const out = await post(redeployURL);
     const resolvedLogPath = (out?.log_path && out?.deploy_path && !String(out.log_path).startsWith('/'))
       ? `${out.deploy_path}/${out.log_path}`
@@ -437,6 +562,13 @@ $('btnRedeploy').onclick = async () => {
     } else {
       setActionResult('Redeploy complete.');
     }
+    if (!isCCMSelfRedeploy) {
+      appendActionLogLine(`[meta] Log path: ${resolvedLogPath || '(none)'}`);
+      const steps = Array.isArray(out?.steps) ? out.steps : [];
+      steps.forEach((step, idx) => appendCommandResultToActionLogs(step, `step-${idx + 1}`));
+      appendActionLogLine('[meta] Redeploy complete');
+      queueActionLogAutoClose(10);
+    }
     await fetchInventory();
   } catch (err) {
     const msg = err?.message || String(err);
@@ -445,16 +577,31 @@ $('btnRedeploy').onclick = async () => {
       await reloadPageAfterCCMRecovery();
       return;
     }
+    if (selected?.id !== 'ccm') {
+      appendActionLogLine(`[meta] Redeploy failed: ${msg}`);
+      queueActionLogAutoClose(10);
+    }
     setActionResult(`Redeploy failed: ${msg}`, true);
   }
 };
 
 function switchTab(tab) {
+  if (tab === 'actionLogs' && $('tabActionLogs')?.hidden) {
+    return;
+  }
+  const previousTab = document.querySelector('.tab.active')?.dataset.tab;
   document.querySelectorAll('.tab').forEach((t) => {
     t.classList.toggle('active', t.dataset.tab === tab);
   });
   document.querySelectorAll('.panel').forEach((p) => p.classList.remove('panel-active'));
-  document.getElementById(`panel${tab[0].toUpperCase() + tab.slice(1)}`).classList.add('panel-active');
+  const panel = document.getElementById(`panel${tab[0].toUpperCase() + tab.slice(1)}`);
+  if (panel) panel.classList.add('panel-active');
+  if (tab === 'actionLogs') {
+    stopActionLogCountdown();
+    setActionLogTabLabel();
+  } else if (previousTab === 'actionLogs') {
+    maybeStartActionLogCloseCountdown();
+  }
 }
 
 document.querySelectorAll('.tab').forEach(btn => btn.onclick = () => switchTab(btn.dataset.tab));
