@@ -267,12 +267,31 @@ async function refreshSelectedDetails() {
   if (!selected) return;
 
   if (selected.type === 'container') {
-    const res = await fetch(`/v1/containers/${encodeURIComponent(selected.id)}`);
-    if (!res.ok) {
-      $('details').textContent = `Failed to refresh container details (${res.status})`;
+    let c = null;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const res = await fetch(`/v1/containers/${encodeURIComponent(selected.id)}`);
+      if (res.ok) {
+        c = await res.json();
+        break;
+      }
+      if (res.status === 404) {
+        const refreshed = await fetchInventory({ silent: true, reconcile: false });
+        if (refreshed) {
+          const replacement = inventory.find((i) => i.type === 'container' && i.name === selected.name && i.target_id === selected.target_id);
+          if (replacement && replacement.id !== selected.id) {
+            selected = { ...selected, id: replacement.id, status: replacement.status };
+            continue;
+          }
+        }
+      }
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+      }
+    }
+    if (!c) {
+      $('details').textContent = 'Failed to refresh container details after action.';
       return;
     }
-    const c = await res.json();
     selected = {
       ...selected,
       id: c.id,
@@ -414,7 +433,7 @@ function showActionLogTab(actionName) {
   stopActionLogCountdown();
   actionLogShouldAutoClose = false;
   actionLogCountdownRemaining = 0;
-  actionLogName = `[${actionName}]`;
+  actionLogName = actionName;
   const tab = $('tabActionLogs');
   const panel = $('panelActionLogs');
   if (!tab || !panel) return;
