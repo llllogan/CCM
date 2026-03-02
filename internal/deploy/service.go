@@ -87,7 +87,11 @@ func (s *Service) RedeployStack(ctx context.Context, stackID string) (map[string
 	unlock := s.stackLock(stackID)
 	defer unlock()
 	deployPath := path.Join(stack.Target.DeployRoot, stack.DeploySubdir)
-	results, async, logPath, err := s.runComposeUpSafe(ctx, stack, deployPath)
+	logPath, err := s.resolveRedeployLogPath(ctx, stack.TargetID, deployPath, stack.ID)
+	if err != nil {
+		return nil, err
+	}
+	results, async, err := s.runComposeUpSafe(ctx, stack, deployPath, logPath)
 	if err != nil {
 		return nil, err
 	}
@@ -99,9 +103,7 @@ func (s *Service) RedeployStack(ctx context.Context, stackID string) (map[string
 		"sha":         "manual",
 		"steps":       results,
 		"async":       async,
-	}
-	if logPath != "" {
-		out["log_path"] = logPath
+		"log_path":    logPath,
 	}
 	return out, nil
 }
@@ -148,52 +150,28 @@ func (s *Service) runComposeUp(ctx context.Context, stack *model.CCMStack, deplo
 	return results, nil
 }
 
-func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, deployPath string) ([]model.CommandResult, bool, string, error) {
+func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, deployPath, logPath string) ([]model.CommandResult, bool, error) {
 	if !isLikelySelfCCMStack(stack) {
-		results, err := s.runComposeUp(ctx, stack, deployPath)
-		return results, false, "", err
+		results, err := s.runComposeUpWithLog(ctx, stack, deployPath, logPath)
+		return results, false, err
 	}
 
 	results := []model.CommandResult{}
-	logFile := fmt.Sprintf("ccm-redeploy-%s-%d.log", stack.ID, time.Now().Unix())
-	logPath := logFile
-	prepareLogCmd := fmt.Sprintf("cd %q && : > %q", deployPath, logPath)
-	prepareLogRes, err := s.ssh.RunCommand(ctx, stack.TargetID, prepareLogCmd, 10*time.Second)
-	if err != nil {
-		return nil, false, "", err
-	}
-	results = append(results, prepareLogRes)
-	if prepareLogRes.ExitCode != 0 {
-		// Some hosts mount deploy paths read-only for the SSH user; fall back to /tmp.
-		fallbackPath := path.Join("/tmp", logFile)
-		fallbackCmd := fmt.Sprintf(": > %q", fallbackPath)
-		fallbackRes, ferr := s.ssh.RunCommand(ctx, stack.TargetID, fallbackCmd, 10*time.Second)
-		if ferr != nil {
-			return nil, false, "", ferr
-		}
-		results = append(results, fallbackRes)
-		if fallbackRes.ExitCode != 0 {
-			msg := strings.TrimSpace(fallbackRes.Stderr)
-			if msg == "" {
-				msg = strings.TrimSpace(fallbackRes.Stdout)
-			}
-			if msg == "" {
-				msg = "unknown error preparing log file"
-			}
-			return results, false, "", fmt.Errorf("prepare redeploy log fallback %q failed: %s", fallbackPath, msg)
-		}
-		logPath = fallbackPath
-	}
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "Self-redeploy worker launch requested")
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Working directory: %s", deployPath))
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Flags: pull=%t remove_orphans=%t recreate=%s", stack.Flags.Pull, stack.Flags.RemoveOrphans, stack.Flags.Recreate))
 
-	script := buildRedeployScript(stack, logPath)
+	script := buildRedeployScript(stack)
 	scriptPath := path.Join("/tmp", fmt.Sprintf("ccm-redeploy-%s-%d.sh", stack.ID, time.Now().UnixNano()))
 	if err := s.ssh.WriteFile(ctx, stack.TargetID, scriptPath, []byte(script), "0700", 10*time.Second); err != nil {
-		return nil, false, "", fmt.Errorf("write redeploy worker script: %w", err)
+		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Failed writing worker script: %v", err))
+		return nil, false, fmt.Errorf("write redeploy worker script: %w", err)
 	}
 	detachCmd := fmt.Sprintf("cd %q && nohup sh %q >> %q 2>&1 < /dev/null & echo $!", deployPath, scriptPath, logPath)
 	detachRes, err := s.ssh.RunCommand(ctx, stack.TargetID, detachCmd, 15*time.Second)
 	if err != nil {
-		return nil, false, "", err
+		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Failed launching worker: %v", err))
+		return nil, false, err
 	}
 	results = append(results, detachRes)
 	pid := strings.TrimSpace(detachRes.Stdout)
@@ -202,25 +180,33 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 		if msg == "" {
 			msg = "detached redeploy did not return a pid"
 		}
-		return results, false, "", fmt.Errorf("launch redeploy worker failed: %s", msg)
+		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Worker launch failed: %s", msg))
+		return results, false, fmt.Errorf("launch redeploy worker failed: %s", msg)
 	}
 	if _, perr := strconv.Atoi(pid); perr != nil {
-		return results, false, "", fmt.Errorf("launch redeploy worker returned invalid pid %q", pid)
+		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Worker launch returned invalid pid: %q", pid))
+		return results, false, fmt.Errorf("launch redeploy worker returned invalid pid %q", pid)
 	}
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Worker launched with pid %s", pid))
 	checkCmd := fmt.Sprintf("kill -0 %s", pid)
 	checkRes, err := s.ssh.RunCommand(ctx, stack.TargetID, checkCmd, 5*time.Second)
 	if err != nil {
-		return nil, false, "", err
+		return nil, false, err
 	}
 	results = append(results, checkRes)
-	return results, true, logPath, nil
+	if checkRes.ExitCode == 0 {
+		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "Worker process is running")
+	} else {
+		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "Worker process exited quickly; inspect following lines for command results")
+	}
+	return results, true, nil
 }
 
 func isLikelySelfCCMStack(stack *model.CCMStack) bool {
 	return strings.EqualFold(stack.ID, "ccm")
 }
 
-func buildRedeployScript(stack *model.CCMStack, logPath string) string {
+func buildRedeployScript(stack *model.CCMStack) string {
 	up := "docker compose up -d"
 	if stack.Flags.RemoveOrphans {
 		up += " --remove-orphans"
@@ -231,12 +217,12 @@ func buildRedeployScript(stack *model.CCMStack, logPath string) string {
 	pullLine := ""
 	if stack.Flags.Pull {
 		pullLine = `
-printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "Running: docker compose pull"
+printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "` + stack.ID + `" "Running: docker compose pull"
 docker compose pull
 rc=$?
-printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "docker compose pull exit=$rc"
+printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "` + stack.ID + `" "docker compose pull exit=$rc"
 if [ "$rc" -ne 0 ]; then
-  printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "Redeploy failed during pull"
+  printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "` + stack.ID + `" "Redeploy failed during pull"
   exit "$rc"
 fi
 `
@@ -244,31 +230,148 @@ fi
 
 	return fmt.Sprintf(`#!/bin/sh
 {
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy started"
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Working directory: $(pwd)"
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Flags: pull=%t remove_orphans=%t recreate=%s"
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: docker compose config -q"
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Redeploy started"
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Working directory: $(pwd)"
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Flags: pull=%t remove_orphans=%t recreate=%s"
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Running: docker compose config -q"
   docker compose config -q
   rc=$?
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "docker compose config exit=$rc"
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "docker compose config exit=$rc"
   if [ "$rc" -ne 0 ]; then
-    printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy failed during config validation"
+    printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Redeploy failed during config validation"
     exit "$rc"
   fi
 %s
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: %s"
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Running: %s"
   %s
   rc=$?
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "%s exit=$rc"
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "%s exit=$rc"
   if [ "$rc" -ne 0 ]; then
-    printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy failed during up"
+    printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Redeploy failed during up"
     exit "$rc"
   fi
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: docker compose ps"
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Running: docker compose ps"
   docker compose ps
-  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy finished successfully"
-} >>%s 2>&1
-`, stack.ID, stack.ID, stack.ID, stack.Flags.Pull, stack.Flags.RemoveOrphans, stack.Flags.Recreate, stack.ID, stack.ID, stack.ID, pullLine, stack.ID, up, up, stack.ID, up, stack.ID, stack.ID, stack.ID, strconv.Quote(logPath))
+  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Redeploy finished successfully"
+}
+`, stack.ID, stack.ID, stack.ID, stack.Flags.Pull, stack.Flags.RemoveOrphans, stack.Flags.Recreate, stack.ID, stack.ID, stack.ID, pullLine, stack.ID, up, up, stack.ID, up, stack.ID, stack.ID, stack.ID)
+}
+
+func (s *Service) resolveRedeployLogPath(ctx context.Context, targetID, deployPath, stackID string) (string, error) {
+	logFile := fmt.Sprintf("ccm-redeploy-%s.log", stackID)
+	prepCmd := fmt.Sprintf("cd %q && touch %q", deployPath, logFile)
+	prepRes, err := s.ssh.RunCommand(ctx, targetID, prepCmd, 10*time.Second)
+	if err != nil {
+		return "", err
+	}
+	if prepRes.ExitCode == 0 {
+		return logFile, nil
+	}
+
+	fallback := path.Join("/tmp", logFile)
+	fallbackCmd := fmt.Sprintf("touch %q", fallback)
+	fallbackRes, err := s.ssh.RunCommand(ctx, targetID, fallbackCmd, 10*time.Second)
+	if err != nil {
+		return "", err
+	}
+	if fallbackRes.ExitCode != 0 {
+		return "", fmt.Errorf("prepare redeploy log failed in deploy path and fallback path: %s", commandErrSummary(fallbackRes))
+	}
+	return fallback, nil
+}
+
+func (s *Service) runComposeUpWithLog(ctx context.Context, stack *model.CCMStack, deployPath, logPath string) ([]model.CommandResult, error) {
+	results := []model.CommandResult{}
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "Redeploy started")
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Working directory: %s", deployPath))
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Flags: pull=%t remove_orphans=%t recreate=%s", stack.Flags.Pull, stack.Flags.RemoveOrphans, stack.Flags.Recreate))
+
+	if stack.Flags.Pull {
+		cmd := fmt.Sprintf("cd %q && docker compose pull", deployPath)
+		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "Running: docker compose pull")
+		res, err := s.ssh.RunCommand(ctx, stack.TargetID, cmd, 10*time.Minute)
+		if err != nil {
+			_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("docker compose pull failed to execute: %v", err))
+			return nil, err
+		}
+		results = append(results, res)
+		_ = s.appendCommandResultToLog(ctx, stack, deployPath, logPath, "docker compose pull", res)
+		if res.ExitCode != 0 {
+			_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "Redeploy stopped after pull failure")
+			return results, nil
+		}
+	}
+
+	up := "docker compose up -d"
+	if stack.Flags.RemoveOrphans {
+		up += " --remove-orphans"
+	}
+	if strings.EqualFold(stack.Flags.Recreate, "force") {
+		up += " --force-recreate"
+	}
+	cmd := fmt.Sprintf("cd %q && %s", deployPath, up)
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("Running: %s", up))
+	res, err := s.ssh.RunCommand(ctx, stack.TargetID, cmd, 10*time.Minute)
+	if err != nil {
+		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("%s failed to execute: %v", up, err))
+		return nil, err
+	}
+	results = append(results, res)
+	_ = s.appendCommandResultToLog(ctx, stack, deployPath, logPath, up, res)
+	_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "Redeploy finished")
+	return results, nil
+}
+
+func (s *Service) appendCommandResultToLog(ctx context.Context, stack *model.CCMStack, deployPath, logPath, command string, res model.CommandResult) error {
+	if err := s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, fmt.Sprintf("%s exit=%d", command, res.ExitCode)); err != nil {
+		return err
+	}
+	stdout := strings.TrimSpace(res.Stdout)
+	if stdout != "" {
+		for _, line := range strings.Split(stdout, "\n") {
+			if err := s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "stdout: "+line); err != nil {
+				return err
+			}
+		}
+	}
+	stderr := strings.TrimSpace(res.Stderr)
+	if stderr != "" {
+		for _, line := range strings.Split(stderr, "\n") {
+			if err := s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, "stderr: "+line); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Service) appendRedeployLog(ctx context.Context, targetID, deployPath, logPath, stackID, message string) error {
+	line := fmt.Sprintf("%s [%s] %s", time.Now().Format(time.RFC3339), stackID, message)
+	var cmd string
+	if path.IsAbs(logPath) {
+		cmd = fmt.Sprintf("printf '%%s\\n' %s >> %q", strconv.Quote(line), logPath)
+	} else {
+		cmd = fmt.Sprintf("cd %q && printf '%%s\\n' %s >> %q", deployPath, strconv.Quote(line), logPath)
+	}
+	res, err := s.ssh.RunCommand(ctx, targetID, cmd, 10*time.Second)
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("append redeploy log failed: %s", commandErrSummary(res))
+	}
+	return nil
+}
+
+func commandErrSummary(res model.CommandResult) string {
+	msg := strings.TrimSpace(res.Stderr)
+	if msg == "" {
+		msg = strings.TrimSpace(res.Stdout)
+	}
+	if msg == "" {
+		msg = fmt.Sprintf("exit %d", res.ExitCode)
+	}
+	return msg
 }
 
 func buildEnvContent(raw string, env map[string]string) (string, int, error) {

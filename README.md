@@ -157,10 +157,15 @@ Expected health response:
 
 `POST /v1/compose/{id}/redeploy`:
 - Uses the stack's resolved flags (`pull`, `remove_orphans`, `recreate`).
-- For non-CCM stacks: runs compose synchronously.
-- For stack id `ccm`: starts a detached remote compose job and returns:
+- Writes to a stable append-only log file per stack:
+- `ccm-redeploy-<stack>.log`
+- Log location:
+- First choice: stack deploy directory
+- Fallback: `/tmp` (if deploy directory is not writable by the SSH user)
+- For non-CCM stacks: runs compose synchronously and logs command output/exit codes.
+- For stack id `ccm`: starts a detached remote compose worker and returns:
 - `async: true`
-- `log_path` (log filename in the stack deploy directory, usually `ccm-redeploy-<stack>-<timestamp>.log`)
+- `log_path` (resolved log path used for this redeploy)
 - The log contains timestamped steps (`config`, `pull`, `up`, `ps`) and exit codes.
 
 This protects self-redeploy from dying mid-request while CCM restarts.
@@ -194,7 +199,7 @@ If `ccm` does not come back after redeploy:
 2. On the Docker host, inspect the detached redeploy log:
 ```bash
 cd /opt/ccm
-tail -n 200 ccm-redeploy-*.log
+tail -n 200 ccm-redeploy-ccm.log
 ```
 3. Check compose state:
 ```bash
