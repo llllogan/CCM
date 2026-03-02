@@ -259,6 +259,52 @@ async function ensureComposeChildren(composeID) {
   return children;
 }
 
+async function refreshSelectedDetails() {
+  if (!selected) return;
+
+  if (selected.type === 'container') {
+    const res = await fetch(`/v1/containers/${encodeURIComponent(selected.id)}`);
+    if (!res.ok) {
+      $('details').textContent = `Failed to refresh container details (${res.status})`;
+      return;
+    }
+    const c = await res.json();
+    selected = {
+      ...selected,
+      id: c.id,
+      name: c.name,
+      target_id: c.target_id,
+      status: c.status,
+    };
+    renderStats([
+      ['Image', c.image],
+      ['Restart count', c.restart_count],
+      ['Uptime', c.uptime],
+      ['Ports', (c.ports || []).join(', ') || '-'],
+      ['Container ID', c.container_id],
+      ['Host machine', c.target_id],
+    ]);
+    $('details').textContent = JSON.stringify(c, null, 2);
+    $('title').textContent = c.name;
+    $('subtitle').textContent = c.target_id;
+    $('status').textContent = c.status;
+    return;
+  }
+
+  if (selected.type === 'compose') {
+    delete composeChildrenByID[selected.id];
+    const children = await ensureComposeChildren(selected.id);
+    renderStats([
+      ['Project', selected.name],
+      ['Services', children.length],
+      ['Host machine', selected.target_id],
+      ['Status', selected.status],
+      ['Stack ID', selected.id],
+    ]);
+    $('details').textContent = JSON.stringify(children, null, 2);
+  }
+}
+
 async function post(url) {
   const res = await fetch(url, { method: 'POST' });
   const body = await res.json().catch(() => ({}));
@@ -276,9 +322,12 @@ function setActionResult(message, isError = false) {
 async function runAction(label, fn) {
   try {
     setActionResult(`${label}...`);
+    const activeTab = document.querySelector('.tab.active')?.dataset.tab;
     const result = await fn();
     setActionResult(`${label} complete${result && result.exit_code !== undefined ? ` (exit ${result.exit_code})` : ''}.`);
     await fetchInventory();
+    await refreshSelectedDetails();
+    if (activeTab) switchTab(activeTab);
   } catch (err) {
     const msg = err?.message || String(err);
     setActionResult(`${label} failed: ${msg}`, true);
