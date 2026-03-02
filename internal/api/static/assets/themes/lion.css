@@ -57,3 +57,211 @@
   --font-ui: "Lucida Grande", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
   --font-mono: "Menlo", "Monaco", "Courier New", monospace;
 }
+
+body.theme-lion {
+  background: linear-gradient(180deg, #ced9e3 0%, #9eb1c5 100%);
+}
+
+.theme-lion .desktop-bg {
+  padding: 18px;
+}
+
+.theme-lion .lion-window {
+  border: 1px solid #7f7f7f;
+  border-radius: 10px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35), 0 2px 0 rgba(255, 255, 255, 0.45) inset;
+  overflow: hidden;
+  background: #d7d7d7;
+}
+
+.theme-lion .lion-titlebar {
+  height: 34px;
+  border-bottom: 1px solid #8d8d8d;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  letter-spacing: 0;
+}
+
+.theme-lion .lion-traffic {
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  margin: auto 0;
+  height: 12px;
+}
+
+.theme-lion .lion-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.theme-lion .lion-dot-close { background: #ff5f57; }
+.theme-lion .lion-dot-min { background: #febb2e; }
+.theme-lion .lion-dot-zoom { background: #27c93f; }
+
+.theme-lion .lion-window-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.theme-lion .lion-app-name {
+  position: absolute;
+  right: 12px;
+  font-size: 11px;
+}
+
+.theme-lion .lion-app {
+  gap: 0;
+  padding: 0;
+  grid-template-columns: 300px 1fr;
+}
+
+.theme-lion .lion-sidebar {
+  border: 0;
+  border-right: 1px solid #a2a2a2;
+  border-radius: 0;
+  box-shadow: none;
+  background: linear-gradient(180deg, #e4e8ee 0%, #d4d9e0 100%);
+}
+
+.theme-lion .lion-main {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: linear-gradient(180deg, #f8f8f8 0%, #ececec 100%);
+}
+
+.theme-lion .panel-title {
+  border-radius: 6px;
+  border: 1px solid #9ca9ba;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.theme-lion #search {
+  border-radius: 10px;
+  border: 1px solid #9ea8b2;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+  padding: 7px 10px;
+}
+
+.theme-lion .items {
+  border-radius: 8px;
+  border: 1px solid #a7b1bc;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) inset;
+}
+
+.theme-lion .item {
+  border-bottom: 1px solid #d5dbe2;
+}
+
+.theme-lion .item.active {
+  background: linear-gradient(180deg, #8caed0 0%, #6f93b8 100%);
+}
+
+.theme-lion .item-child {
+  border-left: 0;
+  padding-left: 30px;
+}
+
+.theme-lion .lion-header {
+  padding: 4px 2px;
+}
+
+.theme-lion .header h1 {
+  font-size: 23px;
+  font-weight: 600;
+}
+
+.theme-lion .badge {
+  border-radius: 999px;
+  border: 1px solid #a2a2a2;
+  box-shadow: 0 1px 0 #fff inset;
+  text-transform: none;
+}
+
+.theme-lion .stat {
+  border-radius: 10px;
+  border: 1px solid #b4b4b4;
+  box-shadow: 0 1px 0 #fff inset;
+}
+
+.theme-lion button {
+  border-radius: 14px;
+  border: 1px solid #9099a3;
+  box-shadow: 0 1px 0 #fff inset, 0 1px 1px rgba(0, 0, 0, 0.08);
+  padding: 6px 14px;
+}
+
+.theme-lion button:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #eaf1f8 100%);
+}
+
+.theme-lion button:active {
+  background: linear-gradient(180deg, #d0dce8 0%, #e5ebf2 100%);
+}
+
+.theme-lion .lion-tabs {
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+}
+
+.theme-lion .tab {
+  border-radius: 12px;
+  border: 1px solid #b2b7bd;
+  background: linear-gradient(180deg, #f5f5f5 0%, #dedede 100%);
+}
+
+.theme-lion .tab.active {
+  border-color: #7f9dbd;
+  background: linear-gradient(180deg, #9ab7d4 0%, #6e90b5 100%);
+  color: #fff;
+}
+
+.theme-lion .lion-panel {
+  border-radius: 8px;
+  border: 1px solid #a8a8a8;
+  background: #f5f5f5;
+}
+
+.theme-lion .lion-log-controls {
+  border-bottom: 1px solid #c9c9c9;
+  background: linear-gradient(180deg, #f6f6f6 0%, #ececec 100%);
+}
+
+.theme-lion .action-result {
+  border-radius: 8px;
+  border: 1px solid #b4b4b4;
+}
+
+.theme-lion .logs,
+.theme-lion #details {
+  border-top: 0;
+}
+
+.theme-lion .lion-statusbar {
+  border-top: 1px solid #8c8c8c;
+  background: linear-gradient(180deg, #d4d4d4 0%, #c7c7c7 100%);
+}
+
+.theme-lion .status-segment {
+  border-radius: 8px;
+  border: 1px solid #a8a8a8;
+}
+
+@media (max-width: 980px) {
+  .theme-lion .lion-app {
+    grid-template-columns: 1fr;
+  }
+  .theme-lion .lion-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #a2a2a2;
+  }
+}

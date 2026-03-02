@@ -8,26 +8,28 @@
   <link rel="stylesheet" href="/assets/themes/{{.Theme}}.css" />
 </head>
 <body class="theme-{{.Theme}}">
-  <div class="desktop-bg">
-    <div class="window-shell">
-      <div class="titlebar">
-        <div class="titlebar-left">
-          <span id="streamDot" class="title-dot" title="Log stream disconnected"></span>
-          <strong>Central Container Manager</strong>
+  <div class="desktop-bg lion-desktop">
+    <div class="window-shell lion-window">
+      <div class="titlebar lion-titlebar">
+        <div class="titlebar-left lion-traffic">
+          <span class="lion-dot lion-dot-close" aria-hidden="true"></span>
+          <span class="lion-dot lion-dot-min" aria-hidden="true"></span>
+          <span id="streamDot" class="title-dot lion-dot lion-dot-zoom" title="Log stream disconnected"></span>
         </div>
-        <div class="titlebar-right">CCM.EXE</div>
+        <strong class="lion-window-title">Central Container Manager</strong>
+        <div class="titlebar-right lion-app-name">CCM</div>
       </div>
 
-      <div class="app">
-        <aside class="sidebar panel-frame">
-          <div class="panel-title">Navigator</div>
-          <label class="field-label" for="search">Find:</label>
+      <div class="app lion-app">
+        <aside class="sidebar panel-frame lion-sidebar">
+          <div class="panel-title">All Machines</div>
+          <label class="field-label" for="search">Search</label>
           <input id="search" placeholder="container, stack, host machine" />
           <div id="items" class="items"></div>
         </aside>
 
-        <main class="main panel-frame">
-          <header class="header">
+        <main class="main panel-frame lion-main">
+          <header class="header lion-header">
             <div>
               <h1 id="title">Select an item</h1>
               <div id="subtitle" class="muted">No host machine selected</div>
@@ -37,7 +39,7 @@
 
           <section class="stats" id="stats"></section>
 
-          <section class="actions">
+          <section class="actions lion-actions">
             <button id="btnStart">Start</button>
             <button id="btnStop">Stop</button>
             <button id="btnRestart">Restart</button>
@@ -45,14 +47,14 @@
           </section>
           <div id="actionResult" class="action-result muted">Ready.</div>
 
-          <section class="tabs panel-frame-inset">
+          <section class="tabs panel-frame-inset lion-tabs">
             <button data-tab="logs" class="tab active">Logs</button>
             <button data-tab="details" class="tab">Details</button>
             <button id="tabActionLogs" data-tab="actionLogs" class="tab" hidden>Action logs</button>
           </section>
 
-          <section id="panelLogs" class="panel panel-active panel-frame-inset">
-            <div class="log-controls">
+          <section id="panelLogs" class="panel panel-active panel-frame-inset lion-panel">
+            <div class="log-controls lion-log-controls">
               <button id="btnPause">Pause</button>
               <button id="btnClear">Clear</button>
               <button id="btnCopyLast100">Copy Last 100</button>
@@ -62,17 +64,17 @@
             <pre id="logs" class="logs"></pre>
           </section>
 
-          <section id="panelDetails" class="panel panel-frame-inset">
+          <section id="panelDetails" class="panel panel-frame-inset lion-panel">
             <pre id="details"></pre>
           </section>
 
-          <section id="panelActionLogs" class="panel panel-frame-inset" hidden>
+          <section id="panelActionLogs" class="panel panel-frame-inset lion-panel" hidden>
             <pre id="actionLogs" class="logs"></pre>
           </section>
         </main>
       </div>
 
-      <div class="statusbar">
+      <div class="statusbar lion-statusbar">
         <div class="status-segment">CCM Ready</div>
         <div class="status-segment" id="clock">--:--:--</div>
       </div>

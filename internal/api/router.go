@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -33,6 +34,7 @@ type Router struct {
 	control *control.Service
 	logs    *logs.Service
 	index   *template.Template
+	tpls    map[string]*template.Template
 	rawLogs []byte
 	themes  map[string]struct{}
 }
@@ -61,6 +63,10 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 	if _, ok := themes[defaultTheme]; !ok {
 		panic("default theme missing")
 	}
+	tpls, err := loadThemeTemplates(root, themes)
+	if err != nil {
+		panic("theme templates invalid")
+	}
 
 	r := &Router{
 		cfg:     cfg,
@@ -69,6 +75,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		control: c,
 		logs:    l,
 		index:   index,
+		tpls:    tpls,
 		rawLogs: rawLogs,
 		themes:  themes,
 	}
@@ -119,7 +126,11 @@ func (r *Router) uiRoute(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := r.index.Execute(w, map[string]string{"Theme": theme}); err != nil {
+	tpl := r.index
+	if themed, ok := r.tpls[theme]; ok {
+		tpl = themed
+	}
+	if err := tpl.Execute(w, map[string]string{"Theme": theme}); err != nil {
 		util.WriteErr(w, 500, "template render failed")
 		return
 	}
@@ -146,6 +157,25 @@ func loadThemes(assetsFS fs.FS) (map[string]struct{}, error) {
 		themes[theme] = struct{}{}
 	}
 	return themes, nil
+}
+
+func loadThemeTemplates(root fs.FS, themes map[string]struct{}) (map[string]*template.Template, error) {
+	tpls := map[string]*template.Template{}
+	for theme := range themes {
+		path := fmt.Sprintf("themes/%s.html", theme)
+		if _, err := fs.Stat(root, path); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+		tpl, err := template.ParseFS(root, path)
+		if err != nil {
+			return nil, err
+		}
+		tpls[theme] = tpl
+	}
+	return tpls, nil
 }
 
 func (r *Router) health(w http.ResponseWriter, _ *http.Request) {
