@@ -191,20 +191,42 @@ function renderStats(items) {
 
 function setStreamIndicator(state) {
   const dot = $('streamDot');
+  const lionDotMin = $('lionDotMin');
+  const lionDotZoom = $('lionDotZoom');
+  const title = state === 'active'
+    ? 'Log stream connected'
+    : (state === 'connecting' ? 'Log stream reconnecting' : 'Log stream disconnected');
+
+  if (lionDotMin && lionDotZoom) {
+    lionDotMin.classList.remove('is-connecting');
+    lionDotZoom.classList.remove('is-active');
+
+    if (state === 'connecting') {
+      lionDotMin.classList.add('is-connecting');
+    } else if (state === 'active') {
+      lionDotZoom.classList.add('is-active');
+    }
+
+    lionDotMin.title = title;
+    lionDotZoom.title = title;
+    if (dot) dot.title = title;
+    return;
+  }
+
   if (!dot) return;
   dot.classList.remove('is-active', 'is-inactive', 'is-connecting');
   if (state === 'active') {
     dot.classList.add('is-active');
-    dot.title = 'Log stream connected';
+    dot.title = title;
     return;
   }
   if (state === 'connecting') {
     dot.classList.add('is-connecting');
-    dot.title = 'Log stream reconnecting';
+    dot.title = title;
     return;
   }
   dot.classList.add('is-inactive');
-  dot.title = 'Log stream disconnected';
+  dot.title = title;
 }
 
 function stopLogs({ clearSelection = true } = {}) {
