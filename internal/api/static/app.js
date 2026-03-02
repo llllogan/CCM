@@ -18,6 +18,22 @@ function resetSelectionUI() {
 
 function reconcileSelection() {
   if (!selected) return;
+  if (selected.type === 'container') {
+    // Container rows under compose stacks are not part of top-level inventory items.
+    // Keep current selection during background polling to avoid UI deselection jitter.
+    const cachedChildren = Object.values(composeChildrenByID).flat();
+    const byID = cachedChildren.find((c) => c.id === selected.id);
+    if (byID) {
+      selected = {
+        type: 'container',
+        id: byID.id,
+        name: byID.name,
+        target_id: byID.target_id,
+        status: byID.status,
+      };
+    }
+    return;
+  }
   const byID = inventory.find((i) => i.id === selected.id && i.type === selected.type);
   if (byID) {
     selected = byID;
