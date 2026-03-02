@@ -74,17 +74,6 @@ async function fetchInventory({ silent = false, reconcile = true } = {}) {
   }
 }
 
-async function fetchInventoryWithRetry(attempts = 3, delayMs = 1500) {
-  for (let i = 0; i < attempts; i += 1) {
-    const ok = await fetchInventory({ silent: true, reconcile: true });
-    if (ok) return true;
-    if (i < attempts - 1) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-  }
-  return false;
-}
-
 function renderItems() {
   const q = $('search').value.toLowerCase();
   const host = $('items');
@@ -310,6 +299,17 @@ async function waitForServiceRecovery(timeoutMs = 45000, intervalMs = 1500) {
   return false;
 }
 
+async function reloadPageAfterCCMRecovery() {
+  setActionResult('Waiting for CCM recovery...');
+  const recovered = await waitForServiceRecovery(60000, 1500);
+  if (!recovered) {
+    setActionResult('CCM did not recover within 60s after redeploy attempt.', true);
+    return;
+  }
+  setActionResult('CCM is back online after redeploy. Reloading page...');
+  setTimeout(() => window.location.reload(), 300);
+}
+
 $('search').addEventListener('input', renderItems);
 $('btnPause').onclick = () => {
   paused = !paused;
@@ -379,6 +379,10 @@ $('btnRedeploy').onclick = async () => {
     const pid = out?.steps?.[1]?.stdout?.trim?.() || out?.steps?.[0]?.stdout?.trim?.();
     if (out?.async && out?.log_path) {
       setActionResult(`Redeploy started in background${pid ? ` (pid ${pid})` : ''}. Log: ${resolvedLogPath}`);
+      if (out?.stack === 'ccm') {
+        await reloadPageAfterCCMRecovery();
+        return;
+      }
     } else if (out?.log_path) {
       setActionResult(`Redeploy complete. Log: ${resolvedLogPath}`);
     } else {
@@ -388,19 +392,8 @@ $('btnRedeploy').onclick = async () => {
   } catch (err) {
     const msg = err?.message || String(err);
     if (msg.includes('502')) {
-      setActionResult('Redeploy request interrupted while CCM restarted. Waiting for service recovery...');
-      const recovered = await waitForServiceRecovery();
-      if (recovered) {
-        setActionResult('CCM is back online after redeploy. Refreshing inventory...');
-        const ok = await fetchInventoryWithRetry(5, 1500);
-        if (ok) {
-          setActionResult('CCM is back online after redeploy.');
-        } else {
-          setActionResult('CCM recovered, but inventory refresh is still failing. Try again in a few seconds.', true);
-        }
-      } else {
-        setActionResult('CCM did not recover within 45s after redeploy attempt.', true);
-      }
+      setActionResult('Redeploy request interrupted while CCM restarted.');
+      await reloadPageAfterCCMRecovery();
       return;
     }
     setActionResult(`Redeploy failed: ${msg}`, true);
