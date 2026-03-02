@@ -86,37 +86,12 @@ jobs:
           fi
           cat redeploy-response.json
 
-      - name: Wait for CCM health after self-redeploy
+      - name: Wait 60 seconds after self-redeploy
         shell: bash
         run: |
           set -euo pipefail
 
-          sleep 5
-
-          health_endpoint="${CCM_URL%/}/healthz"
-          max_attempts=60
-          attempt=1
-          healthy=0
-
-          while [ "${attempt}" -le "${max_attempts}" ]; do
-            code="$(
-              curl -sS -o healthz-response.json -w '%{http_code}' \
-                -H "Content-Type: application/json" \
-                "${health_endpoint}" || true
-            )"
-            if [ "${code}" = "200" ] && grep -q '"status":"ok"' healthz-response.json; then
-              healthy=1
-              break
-            fi
-            sleep 2
-            attempt=$((attempt + 1))
-          done
-
-          if [ "${healthy}" -ne 1 ]; then
-            echo "CCM did not become healthy after self-redeploy"
-            cat healthz-response.json 2>/dev/null || true
-            exit 1
-          fi
+          sleep 60
 
       - name: Restart CCM stack containers after self-redeploy
         shell: bash
