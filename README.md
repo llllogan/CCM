@@ -123,6 +123,56 @@ docker compose up -d ccm
 
 ## Section 2: API and GitHub Actions Integration
 
+### How deployment artifacts are assembled
+
+In a typical `dockerops`-style repo, each stack directory contains:
+
+- `docker-compose.yml` (required)
+- `Caddyfile` (optional)
+- `env.json` (optional committed non-secret defaults)
+
+During workflow execution, the reusable action reads files from that stack directory and sends them to CCM:
+
+- `docker-compose.yml` content is sent as `compose_yml`.
+- If present, `Caddyfile` content is sent as `caddyfile`.
+- Environment data is sent as `env` (JSON key/value map).
+
+CCM writes the received payload into the stack deploy directory on the target host:
+
+- always writes `docker-compose.yml`
+- writes `Caddyfile` only when `caddyfile` is present
+- writes `.env` when merged env data is non-empty
+
+Then CCM runs compose (`pull`/`up`) according to stack flags.
+
+### How `.env` is built from secrets and `env.json`
+
+Recommended GitHub pattern:
+
+It is possible to hold multiple compose stacks in the same repo and keep their secrets separate. Create a GitHub environment per stack to store its specific secrets, and run the Workflow against that environment to grab its specific secrets. Share secrets can be stored at the repo level and will also be included.
+
+- Use `all_secrets_json: ${{ toJSON(secrets) }}` in workflow.
+- Set repo-level shared secrets (example: `CLOUDFLARE_API_TOKEN`).
+- Set environment-level stack secrets (example: `LASTFM_API_KEY`, `LASTFM_SECRET` in `navidrome` environment).
+- Optionally commit stack `env.json` for non-secret defaults.
+
+Merge flow in reusable action:
+
+1. Read `env.json` if file exists and parse as object.
+2. Read `toJSON(secrets)` (already includes repo + environment secrets available to the job).
+3. Merge objects with this precedence:
+   - `env.json` first
+   - secrets second (override duplicate keys)
+4. Send merged map to CCM as payload `env`.
+
+CCM `.env` creation behavior:
+
+- CCM takes payload `env_file` (if used) and `env` map.
+- Keys from `env` override duplicate keys from `env_file`.
+- CCM writes one final `.env` file sorted by key.
+
+If your workflow uses only merged `env` (no `env_file`), the final `.env` is generated directly from that merged map.
+
 ### API endpoints
 
 - `GET /healthz`
