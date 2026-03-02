@@ -3,25 +3,77 @@ auth_token: "replace-with-long-random-token"
 inventory_ttl_seconds: 3
 
 targets:
-  vm-prod:
-    host: 192.168.1.50
+  self:
+    host: 10.10.10.21
     port: 22
-    user: deploy
-    deploy_root: /opt
+    user: logan
+    deploy_root: /home/logan
     defaults:
       pull: true
       remove_orphans: true
       recreate: "default"
-    profiles:
-      fast:
-        pull: false
-      force:
-        recreate: "force"
+  sabnzbd:
+    host: 10.10.10.18
+    port: 22
+    user: logan
+    deploy_root: /home/logan
+    defaults:
+      pull: true
+      remove_orphans: true
+      recreate: "default"
+  jellyfin:
+    host: 10.10.10.11
+    port: 22
+    user: logan
+    deploy_root: /home/logan
+    defaults:
+      pull: true
+      remove_orphans: true
+      recreate: "default"
+  pickeragent:
+    host: 10.10.20.9
+    port: 22
+    user: logan
+    deploy_root: /home/deploy
+    defaults:
+      pull: true
+      remove_orphans: true
+      recreate: "default"
+  arrbox:
+    host: 10.10.10.17
+    port: 22
+    user: logan
+    deploy_root: /home/logan
+    defaults:
+      pull: true
+      remove_orphans: true
+      recreate: "default"
+  navidrome:
+    host: 10.10.10.12
+    port: 22
+    user: logan
+    deploy_root: /home/logan
+    defaults:
+      pull: true
+      remove_orphans: true
+      recreate: "default"
 
 stacks:
   ccm:
-    target: vm-prod
+    target: self
     deploy_subdir: ccm
-  repo-a__service1:
-    target: vm-prod
-    deploy_subdir: repo-a/service1
+  sabnzbd:
+    target: sabnzbd
+    deploy_subdir: sabnzbd
+  jellyfin:
+    target: jellyfin
+    deploy_subdir: jellyfin
+  pickeragent:
+    target: pickeragent
+    deploy_subdir: pickeragent
+  arrbox:
+    target: arrbox
+    deploy_subdir: arrbox
+  navidrome:
+    target: navidrome
+    deploy_subdir: navidrome

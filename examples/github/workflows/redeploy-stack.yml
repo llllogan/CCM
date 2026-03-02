@@ -1,0 +1,48 @@
+name: Redeploy existing stack files
+
+on:
+  workflow_dispatch:
+    inputs:
+      stack_id:
+        description: "CCM stack id from /etc/ccm/config.yml"
+        required: true
+        default: "jellyfin"
+
+permissions:
+  contents: read
+
+jobs:
+  redeploy:
+    runs-on: [self-hosted, linux, dockerops]
+    steps:
+      - name: Trigger CCM compose redeploy
+        shell: bash
+        env:
+          CCM_URL: ${{ vars.CCM_URL }}
+          CCM_AUTH_TOKEN: ${{ secrets.CCM_AUTH_TOKEN }}
+          STACK_ID: ${{ github.event.inputs.stack_id }}
+        run: |
+          set -euo pipefail
+          [ -n "${CCM_URL}" ] || { echo "CCM_URL variable is required"; exit 1; }
+          [ -n "${STACK_ID}" ] || { echo "stack_id is required"; exit 1; }
+
+          auth_args=()
+          if [ -n "${CCM_AUTH_TOKEN}" ]; then
+            auth_args=(-H "Authorization: Bearer ${CCM_AUTH_TOKEN}")
+          fi
+
+          code="$(
+            curl -sS -o ccm-redeploy-response.json -w '%{http_code}' \
+              -X POST \
+              -H "Content-Type: application/json" \
+              "${auth_args[@]}" \
+              "${CCM_URL%/}/v1/compose/${STACK_ID}/redeploy"
+          )"
+
+          if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+            echo "redeploy failed with HTTP ${code}"
+            cat ccm-redeploy-response.json
+            exit 1
+          fi
+
+          cat ccm-redeploy-response.json

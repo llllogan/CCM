@@ -1,8 +1,8 @@
 {
   "ccm_stack": "ccm",
-  "repo": "llllogan/ccm",
+  "repo": "example/ccm",
   "sha": "5555555555555555555555555555555555555555",
-  "compose_yml": "services:\n  ccm:\n    image: ghcr.io/llllogan/ccm:555555555555\n    container_name: ccm\n    restart: unless-stopped\n    volumes:\n      - /etc/ccm:/etc/ccm:ro\n      - /home/logan/.ssh:/home/logan/.ssh:ro\n    environment:\n      - CCM_SSH_KEY=/home/logan/.ssh/id_ed25519\n\n  caddy:\n    image: ghcr.io/caddybuilds/caddy-cloudflare:latest\n    container_name: ccm-caddy\n    restart: unless-stopped\n    depends_on:\n      - ccm\n    ports:\n      - \"80:80\"\n      - \"443:443\"\n    environment:\n      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}\n      - ACME_EMAIL=${ACME_EMAIL}\n    volumes:\n      - ./Caddyfile:/etc/caddy/Caddyfile:ro\n      - caddy_data:/data\n      - caddy_config:/config\n\nvolumes:\n  caddy_data:\n  caddy_config:\n",
+  "compose_yml": "services:\n  ccm:\n    image: ghcr.io/llllogan/ccm:555555555555\n    container_name: ccm\n    restart: unless-stopped\n    volumes:\n      - /etc/ccm:/etc/ccm:ro\n      - /home/logan/.ssh:/home/logan/.ssh:ro\n    environment:\n      - CCM_SSH_KEY=/home/logan/.ssh/id_ed25519\n\n  caddy:\n    image: ghcr.io/caddybuilds/caddy-cloudflare:latest\n    container_name: ccm-caddy\n    restart: unless-stopped\n    depends_on:\n      - ccm\n    ports:\n      - \"80:80\"\n      - \"443:443\"\n    env_file:\n      - .env\n    volumes:\n      - ./Caddyfile:/etc/caddy/Caddyfile:ro\n      - caddy_data:/data\n      - caddy_config:/config\n\nvolumes:\n  caddy_data:\n  caddy_config:\n",
   "caddyfile": "{\n  email {\\$ACME_EMAIL}\n}\n\nccm.janssen.host {\n  tls {\n    dns cloudflare {env.CLOUDFLARE_API_TOKEN}\n  }\n  encode zstd gzip\n  reverse_proxy ccm:8080\n}\n",
   "env": {
     "CLOUDFLARE_API_TOKEN": "replace-with-cloudflare-api-token",

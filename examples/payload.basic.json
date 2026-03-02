@@ -1,6 +1,6 @@
 {
-  "ccm_stack": "repo-a__service1",
-  "repo": "example/repo-a",
+  "ccm_stack": "jellyfin",
+  "repo": "example/dockerops",
   "sha": "1111111111111111111111111111111111111111",
-  "compose_yml": "services:\n  app:\n    image: ghcr.io/example/repo-a:111111111111\n    restart: unless-stopped\n"
+  "compose_yml": "services:\n  jellyfin:\n    image: jellyfin/jellyfin:latest\n    container_name: jellyfin\n    restart: unless-stopped\n    ports:\n      - \"8096:8096\"\n"
 }

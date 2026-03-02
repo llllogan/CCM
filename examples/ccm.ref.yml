@@ -1,1 +1,17 @@
-ccm_stack: repo-a__service1
+stacks:
+  arrbox:
+    stack_id: arrbox
+    stack_dir: arrbox
+    has_caddyfile: true
+  jellyfin:
+    stack_id: jellyfin
+    stack_dir: jellyfin
+    has_caddyfile: true
+  navidrome:
+    stack_id: navidrome
+    stack_dir: navidrome
+    has_caddyfile: false
+  sabnzb:
+    stack_id: sabnzbd
+    stack_dir: sabnzb
+    has_caddyfile: true

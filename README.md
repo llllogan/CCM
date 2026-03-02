@@ -1,88 +1,20 @@
 # Central Container Manager (CCM)
 
-CCM is a single-binary control plane for homelab Docker targets.
+CCM is a single-binary control plane for Docker Compose homelabs. It connects to Docker hosts over SSH, shows live inventory in a UI, and provides API endpoints for deploy/redeploy/container control.
 
-## What CCM does
+## Section 1: First Install, UI, and Day-1 Operations
 
-- Connects to one or more Docker hosts over SSH.
-- Shows live container and compose inventory in a built-in web UI.
-- Runs container actions (`start`, `stop`, `restart`).
-- Runs compose redeploys for known stacks.
-- Streams live container logs to the UI.
+### 1) Manual first installation on the CCM host
 
-## Quick mental model
+Create a deployment directory and initial compose file manually.
 
-CCM has two deployment paths:
-
-- `POST /v1/deploy`: writes `docker-compose.yml` / `.env` / `Caddyfile` to the stack deploy directory, then runs compose (`pull` + `up`, based on flags). Use this when you want to change compose content or move to a specific image tag/SHA.
-- `POST /v1/compose/{id}/redeploy`: does not rewrite files; it re-runs compose in the existing deploy directory. Use this when your compose already points to `:latest` and you only want to pull/restart.
-
-## Configuration
-
-Default path: `/etc/ccm/config.yml`.
-
-Example: [`examples/config.yml`](examples/config.yml).
-
-Key fields:
-
-- `targets` define SSH connection and deployment roots.
-- `stacks` map stack IDs to targets and deploy subdirectories.
-- `defaults.pull` controls whether redeploy runs `docker compose pull`.
-- `profiles` can override defaults per stack.
-- For a stack deploy path, CCM writes `docker-compose.yml`, `Caddyfile`, and `.env` in that directory when using `POST /v1/deploy`.
-
-Important:
-- If `pull: false`, redeploy will not fetch new remote images.
-- For newcomers, keep `pull: true` for your `ccm` stack.
-- Self-redeploy special handling is tied to stack id `ccm`. If you want safe detached self-redeploy behavior, name that stack `ccm`.
-
-## First-time setup checklist
-
-1. Create `/etc/ccm/config.yml` from [`examples/config.yml`](examples/config.yml).
-2. Verify the SSH user in each `target` can run Docker commands on the host.
-3. Ensure `deploy_root` + `deploy_subdir` points to the compose directory you expect (example: `/opt/ccm`).
-4. For self-updates with `:latest`, keep `pull: true` for stack `ccm`.
-5. Start CCM and confirm `GET /healthz` returns `{"status":"ok"}`.
-
-## Run locally
-
-```bash
-go mod tidy
-go run ./cmd/ccm -config ./examples/config.yml -listen :8080
-```
-
-## Run with Docker Compose
-
-```bash
-docker compose up -d
-```
-
-The CCM container image is published on GHCR in a public package. You can pull and run it in your own instance:
-
-```bash
-docker pull ghcr.io/llllogan/ccm:latest
-```
-
-Using `:latest` is supported for self-hosted CCM instances when your stack has `pull: true`, so redeploy will fetch newer image versions.
-
-You can run CCM in two ways:
-
-- Minimal (no Caddy): expose CCM directly on a host port.
-- With Caddy: add reverse proxy/TLS in front of CCM.
-
-`Caddyfile` is optional and only needed if you run the Caddy service.
-
-## First-time host deployment (explicit steps)
-
-If this is your first CCM install on a host, create the deployment directory and files before starting:
-
-1. Create the directory:
 ```bash
 sudo mkdir -p /opt/ccm
 cd /opt/ccm
 ```
 
-2. Create `docker-compose.yml` (minimal, no Caddy):
+Create `/opt/ccm/docker-compose.yml` (minimal install, no reverse proxy):
+
 ```yaml
 services:
   ccm:
@@ -92,22 +24,27 @@ services:
     volumes:
       - /etc/ccm:/etc/ccm:ro
       - /home/logan/.ssh:/home/logan/.ssh:ro
-    ports:
-      - "8080:8080"
     environment:
       - CCM_SSH_KEY=/home/logan/.ssh/id_ed25519
+    ports:
+      - "8080:8080"
 ```
 
-3. (Optional) If you want Caddy/TLS, add the `caddy` service from [`docker-compose.yml`](docker-compose.yml), then create `.env`:
-```bash
-cat > /opt/ccm/.env <<'EOF'
-CLOUDFLARE_API_TOKEN=replace-with-cloudflare-token
-EOF
+Optional: add Caddy in front of CCM for TLS. Add the `caddy` service from [`docker-compose.yml`](docker-compose.yml), then create:
+
+- `/opt/ccm/.env`
+```env
+CLOUDFLARE_API_TOKEN=replace-me
+ACME_EMAIL=you@example.com
 ```
 
-4. (Optional) If you enabled Caddy, create `Caddyfile`:
+- `/opt/ccm/Caddyfile`
 ```caddy
-ccm.janssen.host {
+{
+  email {$ACME_EMAIL}
+}
+
+ccm.example.internal {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
@@ -116,7 +53,8 @@ ccm.janssen.host {
 }
 ```
 
-5. Start and verify:
+### 2) Boot the CCM stack
+
 ```bash
 cd /opt/ccm
 docker compose up -d
@@ -124,20 +62,68 @@ docker compose ps
 curl -sS http://127.0.0.1:8080/healthz
 ```
 
-Expected health response:
+Expected:
+
 ```json
 {"status":"ok"}
 ```
 
-## UI notes
+### 3) Add CCM config file
 
-- The top-left status square shows log stream state.
+CCM defaults to `/etc/ccm/config.yml`. Start from [`examples/config.yml`](examples/config.yml).
+
+Minimal points to verify:
+
+- `targets` contains every Docker host CCM should manage.
+- SSH `user` can run Docker commands on each target.
+- `deploy_root` + stack `deploy_subdir` resolves to the real compose folder.
+- Keep `pull: true` for stack `ccm` if you want self-updates with `:latest`.
+- For special self-redeploy behavior, stack id must be exactly `ccm`.
+
+### 4) Navigate the UI
+
+Open `http://<ccm-host>:8080`.
+
+What you can do in UI:
+
+- Browse targets, compose projects, and containers.
+- Open container details.
+- Stream container logs.
+- Run container controls:
+  - `start`
+  - `stop`
+  - `restart`
+- Run compose stack redeploy.
+
+Log indicator (top-left):
+
 - `green`: log stream connected
-- `yellow`: connecting/reconnecting
+- `yellow`: reconnecting
 - `gray`: disconnected
-- If you leave the tab and return, CCM reconnects the log stream automatically.
 
-## API summary
+### 5) Understand stack controls and self-redeploy
+
+CCM has two deploy modes:
+
+- `POST /v1/deploy`: write `docker-compose.yml` and optional `.env`/`Caddyfile`, then run compose.
+- `POST /v1/compose/{id}/redeploy`: do not rewrite files; just re-run compose in place.
+
+For `ccm` stack id specifically, redeploy runs with detached worker semantics so CCM can restart itself safely without cutting off the operation. Logs are written to `ccm-redeploy-ccm.log` in stack directory (or `/tmp` fallback).
+
+If self-redeploy fails:
+
+```bash
+cd /opt/ccm
+tail -n 200 ccm-redeploy-ccm.log
+docker compose ps
+docker compose logs --tail=200 ccm
+docker compose pull ccm
+docker compose up -d ccm
+```
+
+## Section 2: API and GitHub Actions Integration
+
+### API endpoints
 
 - `GET /healthz`
 - `GET /v1/stacks`
@@ -151,74 +137,48 @@ Expected health response:
 - `POST /v1/deploy`
 - `GET /v1/containers/{id}/logs/stream?tail=200`
 
-`POST /v1/deploy` payload fields:
+`POST /v1/deploy` request fields:
 
-- `ccm_stack`
-- `repo`
-- `sha`
-- `compose_yml`
-- `env_file` (optional raw `.env` content)
-- `env` (optional key/value map merged into `.env`, overrides `env_file` duplicates)
-- `caddyfile` (optional content written to `Caddyfile` in deploy directory)
+- `ccm_stack`: stack id from config.
+- `repo`: source repo name.
+- `sha`: source commit sha.
+- `compose_yml`: full compose file content.
+- `env_file` optional raw `.env` text.
+- `env` optional key/value map merged into `.env` (overrides duplicate keys from `env_file`).
+- `caddyfile` optional Caddyfile content.
 
-## Redeploy behavior details
+Reference payloads:
 
-`POST /v1/compose/{id}/redeploy`:
-- Uses the stack's resolved flags (`pull`, `remove_orphans`, `recreate`).
-- Writes to a stable append-only log file per stack:
-- `ccm-redeploy-<stack>.log`
-- Log location:
-- First choice: stack deploy directory
-- Fallback: `/tmp` (if deploy directory is not writable by the SSH user)
-- For non-CCM stacks: runs compose synchronously and logs command output/exit codes.
-- For stack id `ccm`: starts a detached remote compose worker and returns:
-- `async: true`
-- `log_path` (resolved log path used for this redeploy)
-- The log contains timestamped steps (`config`, `pull`, `up`, `ps`) and exit codes.
-- Each redeploy run is delimited with clear `REDEPLOY RUN START` / `REDEPLOY RUN END` markers and a `run=<id>` tag so multiple runs in one file are easy to read.
+- [`examples/payload.basic.json`](examples/payload.basic.json)
+- [`examples/payload.env-file.json`](examples/payload.env-file.json)
+- [`examples/payload.env-map.json`](examples/payload.env-map.json)
+- [`examples/payload.full.json`](examples/payload.full.json)
+- [`examples/payload.ccm-self-deploy.json`](examples/payload.ccm-self-deploy.json)
 
-This protects self-redeploy from dying mid-request while CCM restarts.
+### GitHub Actions patterns from another repo
 
-Note:
-- The stack id must be exactly `ccm` for this behavior. Any other stack id is treated as a normal synchronous redeploy.
+CCM is designed to be called from app/ops repos (for example: a `dockerops` repo containing stack compose files).
 
-## Self-redeploy workflow (GitHub Actions)
+Included examples:
 
-Workflow file: `.github/workflows/release-and-self-deploy.yml`
+- Reusable composite action:
+  - [`examples/github/actions/ccm-deploy/action.yml`](examples/github/actions/ccm-deploy/action.yml)
+- Stack workflow example:
+  - [`examples/github/workflows/deploy-jellyfin.yml`](examples/github/workflows/deploy-jellyfin.yml)
+- Manual stack redeploy workflow:
+  - [`examples/github/workflows/redeploy-stack.yml`](examples/github/workflows/redeploy-stack.yml)
 
-It:
+These examples send compose/caddy/env to CCM, then optionally force container restarts after deploy.
 
-1. Builds and pushes CCM image to GHCR.
-2. Renders compose with new tag.
-3. Calls CCM `POST /v1/deploy` for stack `ccm`.
+### Security note
 
-Required secrets:
+`auth_token` exists in config examples, but current CCM API router does not enforce authentication headers. Deploy CCM only on trusted networks/VPN, or put it behind an authenticated reverse proxy.
 
-- `CCM_URL` (example `http://ccm.internal:8080`)
-- `CLOUDFLARE_API_TOKEN`
-- `ACME_EMAIL` (optional, only if your Caddyfile uses it)
+## Local dev
 
-Note: CCM currently runs without API authentication for internal-network use.
+Run CCM from source:
 
-## Troubleshooting self-redeploy
-
-If `ccm` does not come back after redeploy:
-
-1. Check that `pull` is enabled for stack `ccm` in `/etc/ccm/config.yml`.
-2. On the Docker host, inspect the detached redeploy log:
 ```bash
-cd /opt/ccm
-tail -n 200 ccm-redeploy-ccm.log
-```
-3. Check compose state:
-```bash
-cd /opt/ccm
-docker compose ps
-docker compose logs --tail=200 ccm
-```
-4. Recover manually:
-```bash
-cd /opt/ccm
-docker compose pull ccm
-docker compose up -d ccm
+go mod tidy
+go run ./cmd/ccm -config ./examples/config.yml -listen :8080
 ```

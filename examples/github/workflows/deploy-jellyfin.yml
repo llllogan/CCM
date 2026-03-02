@@ -1,0 +1,39 @@
+name: Deploy jellyfin with CCM
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "jellyfin/**"
+      - ".github/actions/ccm-deploy/**"
+      - ".github/workflows/deploy-jellyfin.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-jellyfin
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, dockerops]
+    environment: jellyfin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via CCM API
+        uses: ./.github/actions/ccm-deploy
+        with:
+          ccm_url: ${{ vars.CCM_URL }}
+          ccm_auth_token: ${{ secrets.CCM_AUTH_TOKEN }}
+          ccm_stack: jellyfin
+          repo: ${{ github.repository }}
+          sha: ${{ github.sha }}
+          compose_path: jellyfin/docker-compose.yml
+          caddyfile_path: jellyfin/Caddyfile
+          env_json_path: jellyfin/env.json
+          all_secrets_json: ${{ toJSON(secrets) }}
+          restart_after_deploy: "true"

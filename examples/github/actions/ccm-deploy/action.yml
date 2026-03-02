@@ -1,0 +1,166 @@
+name: CCM Deploy
+description: Deploy docker-compose stacks by calling CCM API.
+
+inputs:
+  ccm_url:
+    description: Base CCM URL, for example http://10.10.10.21:8080
+    required: true
+  ccm_auth_token:
+    description: Optional CCM bearer token
+    required: false
+    default: ""
+  ccm_stack:
+    description: CCM stack id from config.yml
+    required: true
+  repo:
+    description: Source repository name
+    required: false
+    default: ""
+  sha:
+    description: Source commit sha
+    required: false
+    default: ""
+  compose_path:
+    description: Path to docker-compose.yml in caller repository
+    required: true
+  caddyfile_path:
+    description: Optional path to Caddyfile in caller repository
+    required: false
+    default: ""
+  all_secrets_json:
+    description: Use toJSON(secrets) from the caller workflow
+    required: true
+  env_json_path:
+    description: Optional path to committed env.json in caller repository
+    required: false
+    default: ""
+  restart_after_deploy:
+    description: Restart all containers in the stack after deploy
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy stack with CCM
+      shell: bash
+      env:
+        INPUT_CCM_URL: ${{ inputs.ccm_url }}
+        INPUT_CCM_AUTH_TOKEN: ${{ inputs.ccm_auth_token }}
+        INPUT_CCM_STACK: ${{ inputs.ccm_stack }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_SHA: ${{ inputs.sha }}
+        INPUT_COMPOSE_PATH: ${{ inputs.compose_path }}
+        INPUT_CADDYFILE_PATH: ${{ inputs.caddyfile_path }}
+        INPUT_ALL_SECRETS_JSON: ${{ inputs.all_secrets_json }}
+        INPUT_ENV_JSON_PATH: ${{ inputs.env_json_path }}
+        INPUT_RESTART_AFTER_DEPLOY: ${{ inputs.restart_after_deploy }}
+      run: |
+        set -euo pipefail
+
+        command -v jq >/dev/null 2>&1 || { echo "jq is required"; exit 1; }
+        [ -n "${INPUT_CCM_URL}" ] || { echo "ccm_url is required"; exit 1; }
+        [ -n "${INPUT_CCM_STACK}" ] || { echo "ccm_stack is required"; exit 1; }
+        [ -f "${INPUT_COMPOSE_PATH}" ] || { echo "missing compose file: ${INPUT_COMPOSE_PATH}"; exit 1; }
+
+        caddy_content=""
+        if [ -n "${INPUT_CADDYFILE_PATH}" ]; then
+          [ -f "${INPUT_CADDYFILE_PATH}" ] || { echo "missing caddyfile: ${INPUT_CADDYFILE_PATH}"; exit 1; }
+          caddy_content="$(cat "${INPUT_CADDYFILE_PATH}")"
+        fi
+
+        secrets_env_json="$(printf '%s' "${INPUT_ALL_SECRETS_JSON}" | jq -ce '
+          if type == "object" then
+            with_entries(select(.value != null and (.value | tostring | length) > 0) | .value |= tostring)
+          else
+            error("all_secrets_json must be an object")
+          end
+        ')"
+
+        file_env_json="{}"
+        if [ -n "${INPUT_ENV_JSON_PATH}" ] && [ -f "${INPUT_ENV_JSON_PATH}" ]; then
+          file_env_json="$(jq -ce '
+            if type == "object" then with_entries(.value |= tostring) else error("env.json must be object") end
+          ' "${INPUT_ENV_JSON_PATH}")"
+        fi
+
+        merged_env_json="$(jq -cn --argjson file "${file_env_json}" --argjson secrets "${secrets_env_json}" '$file + $secrets')"
+
+        jq -cn \
+          --arg ccm_stack "${INPUT_CCM_STACK}" \
+          --arg repo "${INPUT_REPO}" \
+          --arg sha "${INPUT_SHA}" \
+          --rawfile compose_yml "${INPUT_COMPOSE_PATH}" \
+          --arg caddyfile "${caddy_content}" \
+          --argjson env "${merged_env_json}" \
+          '
+          {
+            ccm_stack: $ccm_stack,
+            repo: $repo,
+            sha: $sha,
+            compose_yml: $compose_yml
+          }
+          + (if ($caddyfile | length) > 0 then {caddyfile: $caddyfile} else {} end)
+          + (if ($env | length) > 0 then {env: $env} else {} end)
+          ' > ccm-deploy-payload.json
+
+        auth_args=()
+        if [ -n "${INPUT_CCM_AUTH_TOKEN}" ]; then
+          auth_args=(-H "Authorization: Bearer ${INPUT_CCM_AUTH_TOKEN}")
+        fi
+
+        ccm_endpoint="${INPUT_CCM_URL%/}/v1/deploy"
+        status="$(
+          curl -sS -o ccm-deploy-response.json -w '%{http_code}' \
+            -X POST "${ccm_endpoint}" \
+            -H "Content-Type: application/json" \
+            "${auth_args[@]}" \
+            --data @ccm-deploy-payload.json
+        )"
+        if [ "${status}" -lt 200 ] || [ "${status}" -ge 300 ]; then
+          echo "deploy failed: HTTP ${status}"
+          cat ccm-deploy-response.json
+          exit 1
+        fi
+        cat ccm-deploy-response.json
+
+        if [ "${INPUT_RESTART_AFTER_DEPLOY}" != "true" ]; then
+          exit 0
+        fi
+
+        children_endpoint="${INPUT_CCM_URL%/}/v1/items/${INPUT_CCM_STACK}/children"
+        found_ids=""
+        for _ in 1 2 3 4 5; do
+          code="$(
+            curl -sS -o ccm-stack-children.json -w '%{http_code}' \
+              -H "Content-Type: application/json" \
+              "${auth_args[@]}" \
+              "${children_endpoint}"
+          )"
+          if [ "${code}" -ge 200 ] && [ "${code}" -lt 300 ]; then
+            found_ids="$(jq -r '.[].id' ccm-stack-children.json 2>/dev/null || true)"
+            [ -n "${found_ids}" ] && break
+          fi
+          sleep 2
+        done
+
+        [ -n "${found_ids}" ] || exit 0
+
+        failures=0
+        while IFS= read -r cid; do
+          [ -n "${cid}" ] || continue
+          cid_uri="$(jq -rn --arg v "${cid}" '$v|@uri')"
+          code="$(
+            curl -sS -o "restart-${cid_uri}.json" -w '%{http_code}' \
+              -X POST \
+              -H "Content-Type: application/json" \
+              "${auth_args[@]}" \
+              "${INPUT_CCM_URL%/}/v1/containers/${cid_uri}/restart"
+          )"
+          if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+            cat "restart-${cid_uri}.json"
+            failures=$((failures + 1))
+          fi
+        done <<< "${found_ids}"
+
+        [ "${failures}" -eq 0 ] || exit 1

@@ -1,13 +1,12 @@
 {
-  "ccm_stack": "repo-a__service1",
-  "repo": "example/repo-a",
+  "ccm_stack": "arrbox",
+  "repo": "example/dockerops",
   "sha": "4444444444444444444444444444444444444444",
-  "compose_yml": "services:\n  app:\n    image: ghcr.io/example/repo-a:444444444444\n    env_file:\n      - .env\n    restart: unless-stopped\n",
-  "env_file": "APP_ENV=staging\nAPP_PORT=8080\n",
+  "compose_yml": "services:\n  sonarr:\n    image: lscr.io/linuxserver/sonarr:latest\n    container_name: sonarr\n    env_file:\n      - .env\n    restart: unless-stopped\n\n  caddy:\n    image: ghcr.io/caddybuilds/caddy-cloudflare:latest\n    container_name: arr-caddy\n    env_file:\n      - .env\n    volumes:\n      - ./Caddyfile:/etc/caddy/Caddyfile:ro\n    ports:\n      - \"80:80\"\n      - \"443:443\"\n    restart: unless-stopped\n",
+  "env_file": "PUID=1000\nPGID=1000\nTZ=Australia/Brisbane\n",
   "env": {
-    "APP_ENV": "production",
-    "FEATURE_FLAGS": "new-ui,trace",
-    "SECRET_TOKEN": "replace-me"
+    "TZ": "America/Chicago",
+    "CLOUDFLARE_API_TOKEN": "replace-me"
   },
-  "caddyfile": "app.example.internal {\n  encode gzip\n  reverse_proxy app:8080\n}\n"
+  "caddyfile": "(cf_tls) {\n  tls {\n    dns cloudflare {env.CLOUDFLARE_API_TOKEN}\n  }\n}\n\nsonarr.example.internal {\n  import cf_tls\n  reverse_proxy sonarr:8989\n}\n"
 }
