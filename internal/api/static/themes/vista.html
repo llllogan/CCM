@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CCM Console</title>
+  <link rel="stylesheet" href="/assets/base.css" />
+  <link rel="stylesheet" href="/assets/themes/{{.Theme}}.css" />
+</head>
+<body class="theme-{{.Theme}}">
+  <div class="desktop-bg vista-desktop">
+    <div class="window-shell vista-window">
+      <div class="titlebar vista-titlebar">
+        <div class="titlebar-left vista-title-left">
+          <span id="streamDot" class="title-dot vista-orb" title="Log stream disconnected"></span>
+          <strong class="vista-title-text">Central Container Manager</strong>
+        </div>
+        <div class="titlebar-right vista-title-right">CCM</div>
+      </div>
+
+      <div class="app vista-app">
+        <aside class="sidebar panel-frame vista-sidebar">
+          <div class="panel-title">Navigation</div>
+          <label class="field-label" for="search">Search</label>
+          <input id="search" placeholder="container, stack, host machine" />
+          <div id="items" class="items"></div>
+        </aside>
+
+        <main class="main panel-frame vista-main">
+          <header class="header vista-header">
+            <div>
+              <h1 id="title">Select an item</h1>
+              <div id="subtitle" class="muted">No host machine selected</div>
+            </div>
+            <span id="status" class="badge">idle</span>
+          </header>
+
+          <section class="stats" id="stats"></section>
+
+          <section class="actions vista-actions">
+            <button id="btnStart">Start</button>
+            <button id="btnStop">Stop</button>
+            <button id="btnRestart">Restart</button>
+            <button id="btnRedeploy">Redeploy</button>
+          </section>
+          <div id="actionResult" class="action-result muted">Ready.</div>
+
+          <section class="tabs panel-frame-inset vista-tabs">
+            <button data-tab="logs" class="tab active">Logs</button>
+            <button data-tab="details" class="tab">Details</button>
+            <button id="tabActionLogs" data-tab="actionLogs" class="tab" hidden>Action logs</button>
+          </section>
+
+          <section id="panelLogs" class="panel panel-active panel-frame-inset vista-panel">
+            <div class="log-controls vista-log-controls">
+              <button id="btnPause">Pause</button>
+              <button id="btnClear">Clear</button>
+              <button id="btnCopyLast100">Copy Last 100</button>
+              <button id="btnPopoutRaw">Popout Raw</button>
+              <label><input type="checkbox" id="autoScroll" checked /> Auto-scroll</label>
+            </div>
+            <pre id="logs" class="logs"></pre>
+          </section>
+
+          <section id="panelDetails" class="panel panel-frame-inset vista-panel">
+            <pre id="details"></pre>
+          </section>
+
+          <section id="panelActionLogs" class="panel panel-frame-inset vista-panel" hidden>
+            <pre id="actionLogs" class="logs"></pre>
+          </section>
+        </main>
+      </div>
+
+      <div class="statusbar vista-statusbar">
+        <div class="status-segment">CCM Ready</div>
+        <div class="status-segment" id="clock">--:--:--</div>
+      </div>
+    </div>
+  </div>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

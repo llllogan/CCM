@@ -1,0 +1,212 @@
+:root {
+  --bg: #88a7c6;
+  --bg-radial-start: #ceddef;
+  --bg-radial-end: #6483a5;
+
+  --window: #dce7f3;
+  --panel: #edf4fb;
+  --text: #122236;
+  --muted: #46586f;
+
+  --line-dark: #89a1bd;
+  --line-deep: #58799f;
+  --line-mid: #b5c8dc;
+  --line-light: #f7fbff;
+
+  --titlebar-bg: linear-gradient(180deg, #e8f3ff 0%, #cce3fb 28%, #90bde8 52%, #5d97d0 53%, #4f85bb 100%);
+  --titlebar-text: #f6fbff;
+  --titlebar-right-opacity: 0.9;
+
+  --title-dot-border: #2c5b86;
+  --title-dot-connecting: #ffd447;
+  --title-dot-active: #79ff79;
+  --title-dot-inactive: #6c8daf;
+
+  --panel-title-bg: linear-gradient(180deg, #f8fcff 0%, #dceafd 100%);
+  --panel-title-text: #1f3b59;
+
+  --input-bg: #ffffff;
+  --list-bg: #f7fbff;
+  --item-hover-bg: #dfeeff;
+  --item-active-bg: linear-gradient(180deg, #8ec2f4 0%, #5f9fda 100%);
+  --item-active-text: #fff;
+  --item-active-meta: #e7f2ff;
+  --item-child-bg: #ecf5ff;
+  --item-child-line: #86a8ca;
+
+  --badge-bg: #e9f3ff;
+  --stat-bg: #f5faff;
+
+  --action-bg: #edf5ff;
+  --action-ok: #1f7a39;
+  --action-err: #a11f1f;
+
+  --button-bg: linear-gradient(180deg, #fafdff 0%, #d8ecff 42%, #9dc7ef 43%, #72abd9 100%);
+  --button-hover-bg: linear-gradient(180deg, #ffffff 0%, #e5f2ff 42%, #afd3f6 43%, #83b8e4 100%);
+  --button-active-bg: linear-gradient(180deg, #5a92c6 0%, #86b8e2 100%);
+
+  --tab-active-bg: linear-gradient(180deg, #f9fdff 0%, #d6e9fd 100%);
+
+  --logs-bg: #0d1520;
+  --logs-text: #86f78e;
+  --details-bg: #fcfeff;
+  --details-text: #1a2a3d;
+
+  --status-bg: #dceafb;
+
+  --font-ui: "Segoe UI", "Tahoma", "Verdana", sans-serif;
+  --font-mono: "Consolas", "Lucida Console", "Courier New", monospace;
+}
+
+body.theme-vista {
+  background:
+    radial-gradient(1000px 420px at 18% 0%, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0) 70%),
+    linear-gradient(180deg, #bccfe5 0%, #89a9ca 56%, #6e8fb3 100%);
+}
+
+.theme-vista .desktop-bg {
+  padding: 18px;
+}
+
+.theme-vista .vista-window {
+  min-height: calc(100vh - 36px);
+  border: 1px solid #4f79a4;
+  border-radius: 8px;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.32), 0 1px 0 rgba(255, 255, 255, 0.55) inset;
+  overflow: hidden;
+  background: linear-gradient(180deg, #dce7f3 0%, #d1deec 100%);
+}
+
+.theme-vista .vista-titlebar {
+  height: 36px;
+  border-bottom: 1px solid #4c78a3;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.42) inset;
+}
+
+.theme-vista .vista-title-left {
+  gap: 10px;
+}
+
+.theme-vista .vista-title-text {
+  font-weight: 600;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.32);
+}
+
+.theme-vista .vista-title-right {
+  font-size: 11px;
+}
+
+.theme-vista .vista-orb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid #2a5a86;
+  background: radial-gradient(circle at 35% 30%, #9fc3ea 0%, #6f9cca 60%, #4d7cac 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.38) inset, 0 0 0 1px rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+.theme-vista .vista-app {
+  padding: 8px;
+  gap: 8px;
+}
+
+.theme-vista .panel-frame {
+  border-radius: 7px;
+  border: 1px solid #8eaccb;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.62) inset;
+}
+
+.theme-vista .panel-frame-inset {
+  border-radius: 7px;
+  border: 1px solid #9cb5cf;
+  background: #f2f8ff;
+}
+
+.theme-vista .panel-title {
+  border-radius: 6px;
+  border: 1px solid #9ab7d6;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+.theme-vista #search {
+  border-radius: 6px;
+  border: 1px solid #8faecc;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.82) inset;
+}
+
+.theme-vista .items {
+  border-radius: 6px;
+  border: 1px solid #99b4cf;
+}
+
+.theme-vista .item.active {
+  background: var(--item-active-bg);
+}
+
+.theme-vista .item-child {
+  border-left: 0;
+  padding-left: 28px;
+}
+
+.theme-vista .badge {
+  border-radius: 999px;
+  border: 1px solid #8ea9c7;
+}
+
+.theme-vista .stat {
+  border-radius: 7px;
+  border: 1px solid #9fb8d3;
+}
+
+.theme-vista button {
+  border-radius: 6px;
+  border: 1px solid #6f97be;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.52) inset, 0 1px 1px rgba(0, 0, 0, 0.14);
+  color: #163454;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.theme-vista .tabs {
+  background: linear-gradient(180deg, #edf5fe 0%, #dceafa 100%);
+}
+
+.theme-vista .tab {
+  border-radius: 5px;
+  border: 1px solid #8fb0d0;
+  color: #1c3e61;
+}
+
+.theme-vista .tab.active {
+  background: var(--tab-active-bg);
+}
+
+.theme-vista .vista-panel {
+  background: #f4f9ff;
+}
+
+.theme-vista .vista-log-controls {
+  background: linear-gradient(180deg, #f5fafe 0%, #e2eefb 100%);
+  border-bottom: 1px solid #b4c9de;
+}
+
+.theme-vista .action-result {
+  border-radius: 6px;
+  border: 1px solid #9fb8d3;
+}
+
+.theme-vista .logs,
+.theme-vista #details {
+  border-top: 0;
+}
+
+.theme-vista .vista-statusbar {
+  border-top: 1px solid #7395ba;
+  background: linear-gradient(180deg, #e6f1fd 0%, #d0e2f6 100%);
+}
+
+.theme-vista .status-segment {
+  border-radius: 6px;
+  border: 1px solid #94afcb;
+}
