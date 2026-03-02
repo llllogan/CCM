@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,6 +92,8 @@ func (m *Manager) WriteFile(ctx context.Context, targetID, remotePath string, co
 		return err
 	}
 	defer session.Close()
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
@@ -115,6 +118,11 @@ func (m *Manager) WriteFile(ctx context.Context, targetID, remotePath string, co
 
 	select {
 	case err := <-resCh:
+		if err != nil {
+			if msg := strings.TrimSpace(stderr.String()); msg != "" {
+				return fmt.Errorf("%w: %s", err, msg)
+			}
+		}
 		return err
 	case <-ctx.Done():
 		return ctx.Err()
