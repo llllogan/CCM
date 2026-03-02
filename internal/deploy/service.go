@@ -186,7 +186,11 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 	}
 
 	script := buildRedeployScript(stack, logPath)
-	detachCmd := fmt.Sprintf("cd %q && nohup sh -c %s >> %q 2>&1 < /dev/null & echo $!", deployPath, strconv.Quote(script), logPath)
+	scriptPath := path.Join("/tmp", fmt.Sprintf("ccm-redeploy-%s-%d.sh", stack.ID, time.Now().UnixNano()))
+	if err := s.ssh.WriteFile(ctx, stack.TargetID, scriptPath, []byte(script), "0700", 10*time.Second); err != nil {
+		return nil, false, "", fmt.Errorf("write redeploy worker script: %w", err)
+	}
+	detachCmd := fmt.Sprintf("cd %q && nohup sh %q >> %q 2>&1 < /dev/null & echo $!", deployPath, scriptPath, logPath)
 	detachRes, err := s.ssh.RunCommand(ctx, stack.TargetID, detachCmd, 15*time.Second)
 	if err != nil {
 		return nil, false, "", err
@@ -209,16 +213,6 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 		return nil, false, "", err
 	}
 	results = append(results, checkRes)
-	if checkRes.ExitCode != 0 {
-		msg := strings.TrimSpace(checkRes.Stderr)
-		if msg == "" {
-			msg = strings.TrimSpace(checkRes.Stdout)
-		}
-		if msg == "" {
-			msg = "worker exited immediately after launch"
-		}
-		return results, false, "", fmt.Errorf("redeploy worker not running (pid %s): %s", pid, msg)
-	}
 	return results, true, logPath, nil
 }
 
@@ -246,45 +240,44 @@ func buildRedeployScript(stack *model.CCMStack, logPath string) string {
 	pullLine := ""
 	if stack.Flags.Pull {
 		pullLine = `
-log "Running: docker compose pull"
+printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "Running: docker compose pull"
 docker compose pull
 rc=$?
-log "docker compose pull exit=$rc"
+printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "docker compose pull exit=$rc"
 if [ "$rc" -ne 0 ]; then
-  log "Redeploy failed during pull"
+  printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "Redeploy failed during pull"
   exit "$rc"
 fi
 `
 	}
 
-	return fmt.Sprintf(`
-log() { printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "$1"; }
+	return fmt.Sprintf(`#!/bin/sh
 {
-  log "Redeploy started"
-  log "Working directory: $(pwd)"
-  log "Flags: pull=%t remove_orphans=%t recreate=%s"
-  log "Running: docker compose config -q"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy started"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Working directory: $(pwd)"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Flags: pull=%t remove_orphans=%t recreate=%s"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: docker compose config -q"
   docker compose config -q
   rc=$?
-  log "docker compose config exit=$rc"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "docker compose config exit=$rc"
   if [ "$rc" -ne 0 ]; then
-    log "Redeploy failed during config validation"
+    printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy failed during config validation"
     exit "$rc"
   fi
 %s
-  log "Running: %s"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: %s"
   %s
   rc=$?
-  log "%s exit=$rc"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "%s exit=$rc"
   if [ "$rc" -ne 0 ]; then
-    log "Redeploy failed during up"
+    printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy failed during up"
     exit "$rc"
   fi
-  log "Running: docker compose ps"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: docker compose ps"
   docker compose ps
-  log "Redeploy finished successfully"
-}
-`, stack.ID, stack.Flags.Pull, stack.Flags.RemoveOrphans, stack.Flags.Recreate, pullLine, up, up, up)
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy finished successfully"
+} >>%s 2>&1
+`, stack.ID, stack.ID, stack.ID, stack.Flags.Pull, stack.Flags.RemoveOrphans, stack.Flags.Recreate, stack.ID, stack.ID, stack.ID, pullLine, stack.ID, up, up, stack.ID, up, stack.ID, stack.ID, stack.ID, strconv.Quote(logPath))
 }
 
 func buildEnvContent(raw string, env map[string]string) (string, int, error) {

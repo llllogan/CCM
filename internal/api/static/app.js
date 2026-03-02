@@ -296,8 +296,9 @@ $('btnRedeploy').onclick = async () => {
     const resolvedLogPath = (out?.log_path && out?.deploy_path && !String(out.log_path).startsWith('/'))
       ? `${out.deploy_path}/${out.log_path}`
       : out?.log_path;
+    const pid = out?.steps?.[1]?.stdout?.trim?.() || out?.steps?.[0]?.stdout?.trim?.();
     if (out?.async && out?.log_path) {
-      setActionResult(`Redeploy started in background. Log: ${resolvedLogPath}`);
+      setActionResult(`Redeploy started in background${pid ? ` (pid ${pid})` : ''}. Log: ${resolvedLogPath}`);
     } else if (out?.log_path) {
       setActionResult(`Redeploy complete. Log: ${resolvedLogPath}`);
     } else {
