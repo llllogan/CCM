@@ -25,18 +25,16 @@ jobs:
     needs: ci
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      IMAGE_REPO: ghcr.io/llllogan/ccm
     steps:
       - uses: actions/checkout@v4
 
       - name: Compute image coordinates
         id: vars
         run: |
-          owner_lc="$(echo "${GITHUB_ACTOR}" | tr '[:upper:]' '[:lower:]')"
           sha_short="$(echo "${GITHUB_SHA}" | cut -c1-12)"
-          image_repo="ghcr.io/${owner_lc}/ccm"
-          echo "owner_lc=${owner_lc}" >> "$GITHUB_OUTPUT"
           echo "sha_short=${sha_short}" >> "$GITHUB_OUTPUT"
-          echo "image_repo=${image_repo}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -47,7 +45,6 @@ jobs:
 
       - name: Build and push
         env:
-          IMAGE_REPO: ${{ steps.vars.outputs.image_repo }}
           SHA_SHORT: ${{ steps.vars.outputs.sha_short }}
         run: |
           docker build \
