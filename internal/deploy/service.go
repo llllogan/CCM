@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"regexp"
@@ -185,6 +186,10 @@ func (s *Service) runComposeUpSafe(ctx context.Context, stack *model.CCMStack, d
 	detachCmd := fmt.Sprintf("cd %q && nohup sh %q >> %q 2>&1 < /dev/null & echo $!", deployPath, scriptPath, logPath)
 	detachRes, err := s.ssh.RunCommand(ctx, stack.TargetID, detachCmd, 15*time.Second)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, runID, "Worker handoff command timed out; CCM may have restarted during detach. Continuing.")
+			return results, true, nil
+		}
 		_ = s.appendRedeployLog(ctx, stack.TargetID, deployPath, logPath, stack.ID, runID, fmt.Sprintf("Failed launching worker: %v", err))
 		return nil, false, err
 	}
