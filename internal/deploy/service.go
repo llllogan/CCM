@@ -217,12 +217,12 @@ func buildRedeployScript(stack *model.CCMStack) string {
 	pullLine := ""
 	if stack.Flags.Pull {
 		pullLine = `
-printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "` + stack.ID + `" "Running: docker compose pull"
+printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "Running: docker compose pull"
 docker compose pull
 rc=$?
-printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "` + stack.ID + `" "docker compose pull exit=$rc"
+printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "docker compose pull exit=$rc"
 if [ "$rc" -ne 0 ]; then
-  printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "` + stack.ID + `" "Redeploy failed during pull"
+  printf '%s [%s] %s\n' "$(date -Iseconds)" "` + stack.ID + `" "Redeploy failed during pull"
   exit "$rc"
 fi
 `
@@ -230,29 +230,29 @@ fi
 
 	return fmt.Sprintf(`#!/bin/sh
 {
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Redeploy started"
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Working directory: $(pwd)"
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Flags: pull=%t remove_orphans=%t recreate=%s"
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Running: docker compose config -q"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy started"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Working directory: $(pwd)"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Flags: pull=%t remove_orphans=%t recreate=%s"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: docker compose config -q"
   docker compose config -q
   rc=$?
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "docker compose config exit=$rc"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "docker compose config exit=$rc"
   if [ "$rc" -ne 0 ]; then
-    printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Redeploy failed during config validation"
+    printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy failed during config validation"
     exit "$rc"
   fi
 %s
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Running: %s"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: %s"
   %s
   rc=$?
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "%s exit=$rc"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "%s exit=$rc"
   if [ "$rc" -ne 0 ]; then
-    printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Redeploy failed during up"
+    printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy failed during up"
     exit "$rc"
   fi
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Running: docker compose ps"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Running: docker compose ps"
   docker compose ps
-  printf '%%s [%%s] %%s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "%s" "Redeploy finished successfully"
+  printf '%%s [%%s] %%s\n' "$(date -Iseconds)" "%s" "Redeploy finished successfully"
 }
 `, stack.ID, stack.ID, stack.ID, stack.Flags.Pull, stack.Flags.RemoveOrphans, stack.Flags.Recreate, stack.ID, stack.ID, stack.ID, pullLine, stack.ID, up, up, stack.ID, up, stack.ID, stack.ID, stack.ID)
 }
