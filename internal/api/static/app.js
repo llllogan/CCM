@@ -47,6 +47,14 @@ function reconcileSelection() {
   resetSelectionUI();
 }
 
+function isSameSelection(selectedItem, candidate) {
+  if (!selectedItem || !candidate) return false;
+  if (selectedItem.id && candidate.id && selectedItem.id === candidate.id) return true;
+  return selectedItem.type === candidate.type
+    && selectedItem.name === candidate.name
+    && selectedItem.target_id === candidate.target_id;
+}
+
 async function fetchInventory({ silent = false, reconcile = true } = {}) {
   try {
     const res = await fetch('/v1/inventory');
@@ -87,7 +95,7 @@ function renderItems() {
     .forEach(item => {
       const row = document.createElement('div');
       row.className = 'item';
-      if (selected && selected.id === item.id) row.classList.add('active');
+      if (isSameSelection(selected, item)) row.classList.add('active');
       const marker = item.type === 'compose' ? (expandedCompose.has(item.id) ? '[-] ' : '[+] ') : '';
       row.innerHTML = `<div>${marker}${item.name}</div><div class="meta">${item.type} | ${item.target_id} | ${item.status}</div>`;
       row.onclick = async () => {
@@ -111,7 +119,7 @@ function renderItems() {
         children.forEach((c) => {
           const child = document.createElement('div');
           child.className = 'item item-child';
-          if (selected && selected.id === c.id) child.classList.add('active');
+          if (isSameSelection(selected, { type: 'container', id: c.id, name: c.name, target_id: c.target_id })) child.classList.add('active');
           child.innerHTML = `<div>└─ ${c.name}</div><div class="meta">${c.status} | ${c.container_id}</div>`;
           child.onclick = async (evt) => {
             evt.stopPropagation();
