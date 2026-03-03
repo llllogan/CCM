@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/inventory"
 	"github.com/loganjanssen/ccm/internal/logs"
 	"github.com/loganjanssen/ccm/internal/model"
+	"github.com/loganjanssen/ccm/internal/restart"
 	"github.com/loganjanssen/ccm/internal/util"
 )
 
@@ -33,13 +35,14 @@ type Router struct {
 	deploy  *deploy.Service
 	control *control.Service
 	logs    *logs.Service
+	restart *restart.Service
 	index   *template.Template
 	tpls    map[string]*template.Template
 	rawLogs []byte
 	themes  map[string]struct{}
 }
 
-func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, l *logs.Service) http.Handler {
+func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, l *logs.Service, rs *restart.Service) http.Handler {
 	root, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		panic("static root missing")
@@ -74,6 +77,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		deploy:  d,
 		control: c,
 		logs:    l,
+		restart: rs,
 		index:   index,
 		tpls:    tpls,
 		rawLogs: rawLogs,
@@ -88,6 +92,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 	mux.HandleFunc("/v1/containers/", r.containerRoute)
 	mux.HandleFunc("/v1/compose/", r.composeRoute)
 	mux.HandleFunc("/v1/deploy", r.deployRoute)
+	mux.HandleFunc("/v1/restarts/tracking", r.restartTracking)
 
 	mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(assetsFS))))
 	mux.HandleFunc("/raw-logs.html", r.rawLogsPage)
@@ -185,11 +190,13 @@ func (r *Router) health(w http.ResponseWriter, _ *http.Request) {
 func (r *Router) stacks(w http.ResponseWriter, _ *http.Request) {
 	rows := make([]map[string]any, 0, len(r.cfg.Stacks))
 	for id, s := range r.cfg.Stacks {
+		restart := r.resolveStackRestart(id)
 		rows = append(rows, map[string]any{
 			"id":          id,
 			"target_id":   s.TargetID,
 			"deploy_path": s.Target.DeployRoot + "/" + s.DeploySubdir,
 			"flags":       s.Flags,
+			"restart":     restart,
 		})
 	}
 	util.WriteJSON(w, 200, rows)
@@ -271,13 +278,142 @@ func (r *Router) deployRoute(w http.ResponseWriter, req *http.Request) {
 	util.WriteJSON(w, 200, out)
 }
 
+func (r *Router) restartTracking(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		util.WriteErr(w, 405, "method not allowed")
+		return
+	}
+	if r.restart == nil {
+		util.WriteJSON(w, 200, []model.RestartTrackingEntry{})
+		return
+	}
+	util.WriteJSON(w, 200, r.restart.Snapshot())
+}
+
 func (r *Router) containerDetail(w http.ResponseWriter, req *http.Request, id string) {
 	c, ok := r.inv.ContainerByID(req.Context(), id)
 	if !ok {
 		util.WriteErr(w, 404, "container not found")
 		return
 	}
+	c.Restart = r.resolveContainerRestart(c)
 	util.WriteJSON(w, 200, c)
+}
+
+func (r *Router) resolveStackRestart(stackID string) *model.RestartDisplay {
+	stack, ok := r.cfg.Stacks[stackID]
+	if !ok || stack == nil {
+		return nil
+	}
+	strategyName := strings.TrimSpace(stack.Restart.Strategy)
+	if strategyName == "" {
+		return nil
+	}
+	strategy, ok := r.cfg.RestartStrategies[strategyName]
+	if !ok {
+		return &model.RestartDisplay{
+			Enabled: false,
+			Note:    "configured strategy not found",
+		}
+	}
+	tz := strings.TrimSpace(strategy.Timezone)
+	if tz == "" {
+		tz = "Local"
+	}
+	return &model.RestartDisplay{
+		Enabled:  true,
+		Scope:    "stack",
+		Source:   "stack",
+		Strategy: strategyName,
+		Cron:     strategy.Cron,
+		Timezone: tz,
+	}
+}
+
+func (r *Router) resolveContainerRestart(c model.Container) *model.RestartDisplay {
+	_, stack := r.findStackForContainer(c)
+	if stack == nil {
+		return nil
+	}
+
+	service := strings.TrimSpace(c.Labels["com.docker.compose.service"])
+	containerName := strings.TrimSpace(c.Name)
+	var (
+		pref  model.ContainerRestartPreference
+		found bool
+	)
+	if service != "" {
+		pref, found = stack.Restart.Containers[service]
+	}
+	if !found && containerName != "" {
+		pref, found = stack.Restart.Containers[containerName]
+	}
+
+	stackStrategy := strings.TrimSpace(stack.Restart.Strategy)
+	if found {
+		ref := strings.TrimSpace(pref.Strategy)
+		switch {
+		case strings.EqualFold(ref, "none"):
+			return &model.RestartDisplay{
+				Enabled: false,
+				Scope:   "container",
+				Source:  "container",
+				Note:    "explicitly disabled (strategy: none)",
+			}
+		case ref == "" || strings.EqualFold(ref, "inherit"):
+			if stackStrategy == "" {
+				return nil
+			}
+			return r.renderStrategy("container", "stack(inherit)", stackStrategy)
+		default:
+			return r.renderStrategy("container", "container", ref)
+		}
+	}
+
+	if stackStrategy == "" {
+		return nil
+	}
+	return r.renderStrategy("container", "stack", stackStrategy)
+}
+
+func (r *Router) renderStrategy(scope, source, strategyName string) *model.RestartDisplay {
+	strategy, ok := r.cfg.RestartStrategies[strategyName]
+	if !ok {
+		return &model.RestartDisplay{
+			Enabled: false,
+			Scope:   scope,
+			Source:  source,
+			Note:    "configured strategy not found",
+		}
+	}
+	tz := strings.TrimSpace(strategy.Timezone)
+	if tz == "" {
+		tz = "Local"
+	}
+	return &model.RestartDisplay{
+		Enabled:  true,
+		Scope:    scope,
+		Source:   source,
+		Strategy: strategyName,
+		Cron:     strategy.Cron,
+		Timezone: tz,
+	}
+}
+
+func (r *Router) findStackForContainer(c model.Container) (string, *model.CCMStack) {
+	project := strings.TrimSpace(c.ComposeProject)
+	if project == "" {
+		return "", nil
+	}
+	for id, st := range r.cfg.Stacks {
+		if st == nil || st.TargetID != c.TargetID {
+			continue
+		}
+		if filepath.Base(st.DeploySubdir) == project {
+			return id, st
+		}
+	}
+	return "", nil
 }
 
 func (r *Router) containerAction(w http.ResponseWriter, req *http.Request, id, action string) {

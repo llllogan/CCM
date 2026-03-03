@@ -8,17 +8,21 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/loganjanssen/ccm/internal/cronexpr"
 	"github.com/loganjanssen/ccm/internal/model"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Listen              string                     `yaml:"listen"`
-	AuthToken           string                     `yaml:"auth_token"`
-	Targets             map[string]*model.Target   `yaml:"targets"`
-	Stacks              map[string]*model.CCMStack `yaml:"stacks"`
-	InventoryTTLSeconds int                        `yaml:"inventory_ttl_seconds"`
+	Listen              string                           `yaml:"listen"`
+	AuthToken           string                           `yaml:"auth_token"`
+	Targets             map[string]*model.Target         `yaml:"targets"`
+	Stacks              map[string]*model.CCMStack       `yaml:"stacks"`
+	RestartStrategies   map[string]model.RestartStrategy `yaml:"restart_strategies"`
+	RestartStateFile    string                           `yaml:"restart_state_file"`
+	InventoryTTLSeconds int                              `yaml:"inventory_ttl_seconds"`
 }
 
 var stackIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -90,6 +94,42 @@ func (c *Config) Validate() error {
 		}
 		if filepath.IsAbs(s.DeploySubdir) || containsTraversal(s.DeploySubdir) {
 			errs = append(errs, fmt.Sprintf("stack %q deploy_subdir must be relative and traversal-safe", id))
+		}
+		if ref := strings.TrimSpace(s.Restart.Strategy); ref != "" {
+			if _, ok := c.RestartStrategies[ref]; !ok {
+				errs = append(errs, fmt.Sprintf("stack %q references unknown restart strategy %q", id, ref))
+			}
+		}
+		for containerName, pref := range s.Restart.Containers {
+			if strings.TrimSpace(containerName) == "" {
+				errs = append(errs, fmt.Sprintf("stack %q has empty restart container key", id))
+				continue
+			}
+			ref := strings.TrimSpace(pref.Strategy)
+			if ref == "" || strings.EqualFold(ref, "inherit") || strings.EqualFold(ref, "none") {
+				continue
+			}
+			if _, ok := c.RestartStrategies[ref]; !ok {
+				errs = append(errs, fmt.Sprintf("stack %q container %q references unknown restart strategy %q", id, containerName, ref))
+			}
+		}
+	}
+	for name, strategy := range c.RestartStrategies {
+		if !stackIDPattern.MatchString(name) {
+			errs = append(errs, fmt.Sprintf("restart strategy id %q must match %s", name, stackIDPattern.String()))
+		}
+		spec := strings.TrimSpace(strategy.Cron)
+		if spec == "" {
+			errs = append(errs, fmt.Sprintf("restart strategy %q requires cron expression", name))
+			continue
+		}
+		if _, err := cronexpr.Parse(spec); err != nil {
+			errs = append(errs, fmt.Sprintf("restart strategy %q has invalid cron: %v", name, err))
+		}
+		if tz := strings.TrimSpace(strategy.Timezone); tz != "" {
+			if _, err := time.LoadLocation(tz); err != nil {
+				errs = append(errs, fmt.Sprintf("restart strategy %q timezone invalid: %v", name, err))
+			}
 		}
 	}
 

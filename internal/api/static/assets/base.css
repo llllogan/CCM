@@ -216,6 +216,14 @@ body {
   word-break: break-all;
 }
 
+.stat-restart {
+  border-color: var(--line-light) var(--line-deep) var(--line-deep) var(--line-light);
+}
+
+.stat-restart.is-disabled .v {
+  color: var(--muted);
+}
+
 .actions,
 .tabs,
 .log-controls {
