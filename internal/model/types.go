@@ -25,12 +25,57 @@ type Target struct {
 }
 
 type CCMStack struct {
-	ID           string      `yaml:"-" json:"id"`
-	TargetID     string      `yaml:"target" json:"target_id"`
-	DeploySubdir string      `yaml:"deploy_subdir" json:"deploy_subdir"`
-	Profile      string      `yaml:"profile" json:"profile,omitempty"`
-	Target       *Target     `yaml:"-" json:"-"`
-	Flags        DeployFlags `yaml:"-" json:"flags"`
+	ID           string       `yaml:"-" json:"id"`
+	TargetID     string       `yaml:"target" json:"target_id"`
+	DeploySubdir string       `yaml:"deploy_subdir" json:"deploy_subdir"`
+	Profile      string       `yaml:"profile" json:"profile,omitempty"`
+	Restart      StackRestart `yaml:"restart" json:"restart,omitempty"`
+	Target       *Target      `yaml:"-" json:"-"`
+	Flags        DeployFlags  `yaml:"-" json:"flags"`
+}
+
+type StackRestart struct {
+	Strategy   string                                `yaml:"strategy" json:"strategy,omitempty"`
+	Containers map[string]ContainerRestartPreference `yaml:"containers" json:"containers,omitempty"`
+}
+
+type ContainerRestartPreference struct {
+	Strategy string `yaml:"strategy" json:"strategy,omitempty"`
+}
+
+type RestartStrategy struct {
+	Cron     string `yaml:"cron" json:"cron"`
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+}
+
+type RestartTrackingEntry struct {
+	Key                 string    `json:"key"`
+	Scope               string    `json:"scope"`
+	StackID             string    `json:"stack_id"`
+	TargetID            string    `json:"target_id"`
+	ProjectName         string    `json:"project_name"`
+	ContainerSelector   string    `json:"container_selector,omitempty"`
+	Strategy            string    `json:"strategy"`
+	Cron                string    `json:"cron"`
+	Timezone            string    `json:"timezone"`
+	LastEvaluatedMinute string    `json:"last_evaluated_minute,omitempty"`
+	LastAttemptAt       time.Time `json:"last_attempt_at,omitempty"`
+	LastSuccessAt       time.Time `json:"last_success_at,omitempty"`
+	LastResult          string    `json:"last_result,omitempty"`
+	LastExitCode        int       `json:"last_exit_code,omitempty"`
+	LastError           string    `json:"last_error,omitempty"`
+	ConsecutiveFailures int       `json:"consecutive_failures"`
+	ScheduledRestarts   int       `json:"scheduled_restarts"`
+}
+
+type RestartDisplay struct {
+	Enabled  bool   `json:"enabled"`
+	Scope    string `json:"scope,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Strategy string `json:"strategy,omitempty"`
+	Cron     string `json:"cron,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
+	Note     string `json:"note,omitempty"`
 }
 
 type Container struct {
@@ -45,6 +90,7 @@ type Container struct {
 	ComposeProject string            `json:"compose_project,omitempty"`
 	Labels         map[string]string `json:"labels,omitempty"`
 	Uptime         string            `json:"uptime"`
+	Restart        *RestartDisplay   `json:"restart,omitempty"`
 	RawState       map[string]any    `json:"-"`
 }
 

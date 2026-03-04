@@ -75,6 +75,55 @@ Minimal points to verify:
 - Keep `pull: true` for stack `ccm` if you want self-updates with `:latest`.
 - For special self-redeploy behavior, stack id must be exactly `ccm`.
 
+### Restart Strategy (scheduled container restarts)
+
+CCM supports first-class restart strategies in `config.yml`:
+
+- Define reusable strategies under top-level `restart_strategies`.
+- Attach a strategy to an entire stack via `stacks.<id>.restart.strategy`.
+- Override or disable per-container behavior via `stacks.<id>.restart.containers`.
+
+Example:
+
+```yaml
+restart_state_file: /tmp/ccm-restart-state.json
+
+restart_strategies:
+  nightly_4am_local:
+    cron: "0 4 * * *"
+  sunday_430_utc:
+    cron: "30 4 * * 0"
+    timezone: UTC
+
+stacks:
+  arrbox:
+    target: arrbox
+    deploy_subdir: arrbox
+    restart:
+      strategy: nightly_4am_local
+      containers:
+        caddy:
+          strategy: none
+        sonarr:
+          strategy: sunday_430_utc
+```
+
+Cron format is `minute hour day-of-month month day-of-week` (5 fields).
+
+Container restart matching rules:
+
+- Container key is matched against compose service name first.
+- If not found by service label, it is matched against container name.
+- `strategy: none` disables scheduled restart for that container even if stack strategy exists.
+- `strategy: inherit` (or empty) means use stack strategy.
+
+Time tracking behavior:
+
+- Scheduler checks cron matches every ~15s and executes at most once per matching minute per assignment.
+- State is persisted in `restart_state_file` so data survives CCM restarts.
+- Tracking keeps last attempt/success time, last result, last exit code, and consecutive failures.
+- Endpoint: `GET /v1/restarts/tracking`.
+
 ### 4) Navigate the UI
 
 Open `http://<ccm-host>:8080`.
@@ -181,6 +230,7 @@ If your workflow uses only merged `env` (no `env_file`), the final `.env` is gen
 - `POST /v1/compose/{id}/redeploy`
 - `POST /v1/deploy`
 - `GET /v1/containers/{id}/logs/stream?tail=200`
+- `GET /v1/restarts/tracking`
 
 `POST /v1/deploy` request fields:
 

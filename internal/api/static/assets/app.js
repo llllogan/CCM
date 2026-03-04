@@ -9,6 +9,7 @@ let actionLogName = '';
 let actionLogCountdownTimer = null;
 let actionLogCountdownRemaining = 0;
 let actionLogShouldAutoClose = false;
+const stacksByID = {};
 
 const $ = (id) => document.getElementById(id);
 
@@ -73,6 +74,24 @@ async function fetchInventory({ silent = false, reconcile = true } = {}) {
   } catch (err) {
     if (!silent) {
       setActionResult(`Inventory refresh failed: ${err?.message || String(err)}`, true);
+    }
+    return false;
+  }
+}
+
+async function fetchStacks({ silent = false } = {}) {
+  try {
+    const res = await fetch('/v1/stacks');
+    if (!res.ok) throw new Error(`stacks request failed (${res.status})`);
+    const rows = await res.json();
+    Object.keys(stacksByID).forEach((k) => delete stacksByID[k]);
+    (rows || []).forEach((row) => {
+      if (row?.id) stacksByID[row.id] = row;
+    });
+    return true;
+  } catch (err) {
+    if (!silent) {
+      setActionResult(`Stack metadata refresh failed: ${err?.message || String(err)}`, true);
     }
     return false;
   }
@@ -157,24 +176,28 @@ async function selectItem(item) {
     const c = await res.json();
     renderStats([
       ['Image', c.image],
-      ['Restart count', c.restart_count],
       ['Uptime', c.uptime],
       ['Ports', (c.ports || []).join(', ') || '-'],
       ['Container ID', c.container_id],
+      ['Restart count', c.restart_count],
       ['Host machine', c.target_id],
-    ]);
+    ], { restart: c.restart });
     $('details').textContent = JSON.stringify(c, null, 2);
     startLogs(c.id);
     switchTab('logs');
   } else if (item.type === 'compose') {
+    if (!stacksByID[item.id]) {
+      await fetchStacks({ silent: true });
+    }
     const children = await ensureComposeChildren(item.id);
+    const stackRow = stacksByID[item.id];
     renderStats([
       ['Project', item.name],
       ['Services', children.length],
       ['Host machine', item.target_id],
       ['Status', item.status],
       ['Stack ID', item.id],
-    ]);
+    ], { restart: stackRow?.restart || null });
     $('details').textContent = JSON.stringify(children, null, 2);
     stopLogs();
     switchTab('details');
@@ -185,8 +208,40 @@ async function selectItem(item) {
   }
 }
 
-function renderStats(items) {
-  $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+function renderStats(items, options = {}) {
+  const cards = [];
+  items.forEach(([k, v]) => {
+    cards.push(`<div class="stat"><div class="k">${escapeHTML(k)}</div><div class="v">${escapeHTML(String(v ?? '-'))}</div></div>`);
+  });
+  if (options.restart) {
+    cards.push(renderRestartCard(options.restart));
+  }
+  $('stats').innerHTML = cards.join('');
+}
+
+function renderRestartCard(restart) {
+  const disabled = restart?.enabled === false;
+  const source = restart?.source ? ` (${restart.source})` : '';
+  let body = '-';
+  if (disabled) {
+    body = escapeHTML(restart?.note || 'Not enabled');
+  } else {
+    const parts = [];
+    if (restart?.strategy) parts.push(`name: ${restart.strategy}`);
+    if (restart?.cron) parts.push(`cron: ${restart.cron}`);
+    if (restart?.timezone) parts.push(`tz: ${restart.timezone}`);
+    body = escapeHTML(parts.join(' | ') || 'Configured');
+  }
+  return `<div class="stat stat-restart${disabled ? ' is-disabled' : ''}"><div class="k">Restart Strategy${escapeHTML(source)}</div><div class="v">${body}</div></div>`;
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function setStreamIndicator(state) {
@@ -328,7 +383,7 @@ async function refreshSelectedDetails() {
       ['Ports', (c.ports || []).join(', ') || '-'],
       ['Container ID', c.container_id],
       ['Host machine', c.target_id],
-    ]);
+    ], { restart: c.restart });
     $('details').textContent = JSON.stringify(c, null, 2);
     $('title').textContent = c.name;
     $('subtitle').textContent = c.target_id;
@@ -337,15 +392,19 @@ async function refreshSelectedDetails() {
   }
 
   if (selected.type === 'compose') {
+    if (!stacksByID[selected.id]) {
+      await fetchStacks({ silent: true });
+    }
     delete composeChildrenByID[selected.id];
     const children = await ensureComposeChildren(selected.id);
+    const stackRow = stacksByID[selected.id];
     renderStats([
       ['Project', selected.name],
       ['Services', children.length],
       ['Host machine', selected.target_id],
       ['Status', selected.status],
       ['Stack ID', selected.id],
-    ]);
+    ], { restart: stackRow?.restart || null });
     $('details').textContent = JSON.stringify(children, null, 2);
   }
 }
@@ -665,7 +724,11 @@ document.addEventListener('visibilitychange', () => {
   tickClock();
   setInterval(tickClock, 1000);
   await fetchInventory({ silent: true, reconcile: false });
+  await fetchStacks({ silent: true });
   setInterval(() => {
     fetchInventory({ silent: true, reconcile: false });
   }, 4000);
+  setInterval(() => {
+    fetchStacks({ silent: true });
+  }, 15000);
 })();

@@ -1,6 +1,16 @@
 listen: ":8080"
 auth_token: "replace-with-long-random-token"
 inventory_ttl_seconds: 3
+restart_state_file: /tmp/ccm-restart-state.json
+
+restart_strategies:
+  nightly_4am_local:
+    cron: "0 4 * * *"
+  sunday_430_local:
+    cron: "30 4 * * 0"
+  monthly_1st_345_utc:
+    cron: "45 3 1 * *"
+    timezone: UTC
 
 targets:
   self:
@@ -62,18 +72,37 @@ stacks:
   ccm:
     target: self
     deploy_subdir: ccm
+    restart:
+      strategy: sunday_430_local
+      containers:
+        ccm:
+          strategy: none
   sabnzbd:
     target: sabnzbd
     deploy_subdir: sabnzbd
+    restart:
+      strategy: nightly_4am_local
   jellyfin:
     target: jellyfin
     deploy_subdir: jellyfin
+    restart:
+      strategy: sunday_430_local
+      containers:
+        jellyfin:
+          strategy: nightly_4am_local
   pickeragent:
     target: pickeragent
     deploy_subdir: pickeragent
   arrbox:
     target: arrbox
     deploy_subdir: arrbox
+    restart:
+      strategy: nightly_4am_local
+      containers:
+        caddy:
+          strategy: none
+        sonarr:
+          strategy: monthly_1st_345_utc
   navidrome:
     target: navidrome
     deploy_subdir: navidrome
