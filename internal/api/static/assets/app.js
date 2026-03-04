@@ -302,7 +302,8 @@ function startLogs(id, { resetOutput = true } = {}) {
     $('logs').textContent = '';
   }
   setStreamIndicator('connecting');
-  stream = new EventSource(`/v1/containers/${encodeURIComponent(id)}/logs/stream?tail=200`);
+  const tail = resetOutput ? 200 : 0;
+  stream = new EventSource(`/v1/containers/${encodeURIComponent(id)}/logs/stream?tail=${tail}`);
   stream.onopen = () => {
     setStreamIndicator('active');
   };

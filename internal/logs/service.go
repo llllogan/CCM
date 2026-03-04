@@ -28,7 +28,7 @@ func (s *Service) StreamContainerLogs(ctx context.Context, id string, tail int, 
 	if _, ok := s.cfg.Targets[targetID]; !ok {
 		return fmt.Errorf("unknown target %q", targetID)
 	}
-	if tail <= 0 {
+	if tail < 0 {
 		tail = 200
 	}
 	cmd := "docker logs -f --tail " + strconv.Itoa(tail) + " " + containerID
