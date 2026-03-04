@@ -1,6 +1,6 @@
 :root {
   --bg: #000000;
-  --bg-radial-start: #020409;
+  --bg-radial-start: #000000;
   --bg-radial-end: #000000;
 
   --window: #000000;
@@ -25,7 +25,7 @@
   --panel-title-bg: linear-gradient(90deg, #1c4f9c 0%, #2c6ecf 100%);
   --panel-title-text: #eaf2ff;
 
-  --input-bg: #02060e;
+  --input-bg: #000000;
   --list-bg: #000000;
   --item-hover-bg: #0d1d39;
   --item-active-bg: #f0b100;
@@ -66,7 +66,6 @@ body.theme-bloomi {
 .theme-bloomi .desktop-bg {
   padding: 4px;
   background:
-    linear-gradient(180deg, rgba(24, 66, 133, 0.15) 0%, transparent 25%),
     repeating-linear-gradient(
       0deg,
       rgba(255, 197, 74, 0.03) 0px,
@@ -80,7 +79,7 @@ body.theme-bloomi {
   min-height: calc(100vh - 8px);
   border: 1px solid #2b5fb5;
   box-shadow: inset 0 0 0 1px #0d1f3e;
-  background: #000;
+  background: #000000;
 }
 
 .theme-bloomi .bloomi-topbar {
@@ -89,7 +88,7 @@ body.theme-bloomi {
   align-items: center;
   height: 46px;
   padding: 0 8px;
-  background: linear-gradient(180deg, #111722 0%, #0a1018 100%);
+  background: linear-gradient(180deg, #090909 0%, #020202 100%);
   color: #d5def0;
   border-bottom: 1px solid #2c3f62;
   white-space: nowrap;
@@ -261,7 +260,7 @@ body.theme-bloomi {
 .theme-bloomi .bloomi-sidebar {
   border-right: 1px solid #2d4f89;
   padding: 6px;
-  background: #01050d;
+  background: #000000;
 }
 
 .theme-bloomi .panel-title {
