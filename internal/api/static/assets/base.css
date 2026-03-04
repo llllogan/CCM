@@ -10,11 +10,15 @@ body {
 
 .desktop-bg {
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 14px;
 }
 
 .window-shell {
   min-height: calc(100vh - 28px);
+  min-height: calc(100dvh - 28px);
+  height: calc(100vh - 28px);
+  height: calc(100dvh - 28px);
   background: var(--window);
   border: 2px solid;
   border-color: var(--line-light) var(--line-deep) var(--line-deep) var(--line-light);
@@ -164,6 +168,7 @@ body {
   gap: 10px;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .header {
@@ -277,11 +282,14 @@ button:active {
   display: none;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .panel-active {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .logs,
@@ -331,9 +339,13 @@ button:active {
 @media (max-width: 980px) {
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .sidebar {
+    max-height: min(40dvh, 340px);
   }
   .items {
-    max-height: 240px;
+    flex: 1;
+    max-height: none;
   }
 }
