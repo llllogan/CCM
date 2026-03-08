@@ -2,6 +2,7 @@ package script
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"path"
@@ -12,7 +13,13 @@ import (
 
 	"github.com/loganjanssen/ccm/internal/config"
 	"github.com/loganjanssen/ccm/internal/cronexpr"
+	"github.com/loganjanssen/ccm/internal/model"
 	"github.com/loganjanssen/ccm/internal/sshx"
+)
+
+var (
+	ErrScriptNotFound = errors.New("script not found")
+	ErrScriptRunning  = errors.New("script already running")
 )
 
 type Service struct {
@@ -20,8 +27,9 @@ type Service struct {
 	ssh         *sshx.Manager
 	assignments []assignment
 
-	mu    sync.Mutex
-	state map[string]string
+	mu       sync.Mutex
+	state    map[string]string
+	tracking map[string]model.ScriptTrackingEntry
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -50,6 +58,7 @@ func NewService(cfg *config.Config, ssh *sshx.Manager) (*Service, error) {
 		ssh:         ssh,
 		assignments: assignments,
 		state:       map[string]string{},
+		tracking:    buildTracking(assignments),
 	}, nil
 }
 
@@ -97,7 +106,23 @@ func (s *Service) evaluate(ctx context.Context, now time.Time) {
 		if !s.markIfNewMinute(a.key, minuteKey) {
 			continue
 		}
-		s.runAssignment(ctx, a)
+		res, err := s.runAssignment(ctx, a, "scheduled")
+		if err != nil {
+			log.Printf("script scheduler: %s failed on %s: %v", a.key, a.targetID, err)
+			continue
+		}
+		if res.ExitCode != 0 {
+			msg := strings.TrimSpace(res.Stderr)
+			if msg == "" {
+				msg = strings.TrimSpace(res.Stdout)
+			}
+			if msg == "" {
+				msg = fmt.Sprintf("exit %d", res.ExitCode)
+			}
+			log.Printf("script scheduler: %s failed on %s: %s", a.key, a.targetID, msg)
+			continue
+		}
+		log.Printf("script scheduler: %s executed on %s", a.key, a.targetID)
 	}
 }
 
@@ -111,25 +136,126 @@ func (s *Service) markIfNewMinute(key, minuteKey string) bool {
 	return true
 }
 
-func (s *Service) runAssignment(ctx context.Context, a assignment) {
+func (s *Service) SnapshotByStack(stackID string) []model.ScriptTrackingEntry {
+	entries := make([]model.ScriptTrackingEntry, 0)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range s.assignments {
+		if a.stackID != stackID {
+			continue
+		}
+		if row, ok := s.tracking[a.key]; ok {
+			entries = append(entries, row)
+		}
+	}
+	return entries
+}
+
+func (s *Service) RunNow(ctx context.Context, stackID, scriptName string) (model.CommandResult, model.ScriptTrackingEntry, error) {
+	a, ok := s.findAssignment(stackID, scriptName)
+	if !ok {
+		return model.CommandResult{}, model.ScriptTrackingEntry{}, ErrScriptNotFound
+	}
+	res, err := s.runAssignment(ctx, a, "manual")
+	entry := s.snapshotForKey(a.key)
+	return res, entry, err
+}
+
+func (s *Service) findAssignment(stackID, scriptName string) (assignment, bool) {
+	for _, a := range s.assignments {
+		if a.stackID == stackID && a.name == scriptName {
+			return a, true
+		}
+	}
+	return assignment{}, false
+}
+
+func (s *Service) snapshotForKey(key string) model.ScriptTrackingEntry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.tracking[key]
+}
+
+func (s *Service) runAssignment(ctx context.Context, a assignment, trigger string) (model.CommandResult, error) {
+	if !s.markRunning(a.key) {
+		return model.CommandResult{}, ErrScriptRunning
+	}
+	defer s.markFinished(a.key)
+
+	started := time.Now()
 	cmd := fmt.Sprintf("cd %q && /bin/sh %q", a.deployPath, path.Join("ccm_scripts", a.file))
 	res, err := s.ssh.RunCommand(ctx, a.targetID, cmd, 30*time.Minute)
-	if err != nil {
-		log.Printf("script scheduler: %s failed on %s: %v", a.key, a.targetID, err)
+	s.recordAttempt(a.key, trigger, started, res, err)
+	return res, err
+}
+
+func (s *Service) markRunning(key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row := s.tracking[key]
+	if row.Running {
+		return false
+	}
+	row.Running = true
+	s.tracking[key] = row
+	return true
+}
+
+func (s *Service) markFinished(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row := s.tracking[key]
+	row.Running = false
+	s.tracking[key] = row
+}
+
+func (s *Service) recordAttempt(key, trigger string, started time.Time, res model.CommandResult, runErr error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row := s.tracking[key]
+	row.LastAttemptAt = started
+	row.LastExitCode = res.ExitCode
+	if trigger == "manual" {
+		row.ManualRuns++
+	} else {
+		row.ScheduledRuns++
+	}
+
+	if runErr != nil {
+		row.LastResult = "failed"
+		row.LastError = runErr.Error()
+		row.ConsecutiveFailures++
+		s.tracking[key] = row
 		return
 	}
+
+	row.LastError = ""
 	if res.ExitCode != 0 {
-		msg := strings.TrimSpace(res.Stderr)
-		if msg == "" {
-			msg = strings.TrimSpace(res.Stdout)
-		}
-		if msg == "" {
-			msg = fmt.Sprintf("exit %d", res.ExitCode)
-		}
-		log.Printf("script scheduler: %s failed on %s: %s", a.key, a.targetID, msg)
+		row.LastResult = "failed"
+		row.ConsecutiveFailures++
+		s.tracking[key] = row
 		return
 	}
-	log.Printf("script scheduler: %s executed on %s", a.key, a.targetID)
+	row.LastResult = "success"
+	row.LastSuccessAt = started
+	row.ConsecutiveFailures = 0
+	s.tracking[key] = row
+}
+
+func buildTracking(assignments []assignment) map[string]model.ScriptTrackingEntry {
+	rows := make(map[string]model.ScriptTrackingEntry, len(assignments))
+	for _, a := range assignments {
+		rows[a.key] = model.ScriptTrackingEntry{
+			Key:      a.key,
+			StackID:  a.stackID,
+			TargetID: a.targetID,
+			Name:     a.name,
+			Cron:     a.cron,
+			Timezone: a.timezone,
+			File:     a.file,
+		}
+	}
+	return rows
 }
 
 func buildAssignments(cfg *config.Config) ([]assignment, error) {

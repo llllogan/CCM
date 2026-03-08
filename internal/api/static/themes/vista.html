@@ -48,6 +48,7 @@
           <section class="tabs panel-frame-inset vista-tabs">
             <button data-tab="logs" class="tab active">Logs</button>
             <button data-tab="details" class="tab">Details</button>
+            <button id="tabScheduled" data-tab="scheduled" class="tab" hidden>Scheduled Tasks</button>
             <button id="tabActionLogs" data-tab="actionLogs" class="tab" hidden>Action logs</button>
           </section>
 
@@ -64,6 +65,13 @@
 
           <section id="panelDetails" class="panel panel-frame-inset vista-panel">
             <pre id="details"></pre>
+          </section>
+
+          <section id="panelScheduled" class="panel panel-frame-inset vista-panel" hidden>
+            <div class="scheduled-controls">
+              <button id="btnScheduledRefresh">Refresh</button>
+            </div>
+            <div id="scheduledTasks" class="scheduled-tasks"></div>
           </section>
 
           <section id="panelActionLogs" class="panel panel-frame-inset vista-panel" hidden>

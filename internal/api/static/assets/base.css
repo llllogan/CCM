@@ -238,6 +238,12 @@ body {
   padding: 7px;
 }
 
+.scheduled-controls {
+  display: flex;
+  justify-content: flex-end;
+  padding: 7px;
+}
+
 .action-result {
   padding: 6px 8px;
   border: 2px solid;
@@ -315,6 +321,39 @@ button:active {
   color: var(--details-text);
   overflow-x: auto;
   white-space: pre;
+}
+
+.scheduled-tasks {
+  margin: 0;
+  padding: 10px;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  overflow: auto;
+  border-top: 2px solid;
+  border-color: var(--line-deep) var(--line-light) var(--line-light) var(--line-deep);
+  background: var(--details-bg);
+  color: var(--details-text);
+  font-size: 12px;
+}
+
+.scheduled-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.scheduled-table th,
+.scheduled-table td {
+  border: 1px solid #8c8c8c;
+  padding: 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.scheduled-table th {
+  background: #d6d6d6;
+  text-transform: uppercase;
+  font-size: 11px;
 }
 
 .statusbar {

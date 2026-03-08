@@ -5,6 +5,7 @@ let streamContainerID = null;
 let paused = false;
 const composeChildrenByID = {};
 const expandedCompose = new Set();
+const scheduledTasksByStackID = {};
 let actionLogName = '';
 let actionLogCountdownTimer = null;
 let actionLogCountdownRemaining = 0;
@@ -16,6 +17,7 @@ const $ = (id) => document.getElementById(id);
 function resetSelectionUI() {
   selected = null;
   stopLogs();
+  setScheduledTabVisible(false);
   $('title').textContent = 'Select an item';
   $('subtitle').textContent = 'No host machine selected';
   $('status').textContent = 'idle';
@@ -158,6 +160,7 @@ async function selectItem(item) {
   $('status').textContent = item.status;
 
   if (item.type === 'container') {
+    setScheduledTabVisible(false);
     const res = await fetch(`/v1/containers/${encodeURIComponent(item.id)}`);
     if (!res.ok) {
       if (res.status === 404) {
@@ -186,6 +189,7 @@ async function selectItem(item) {
     startLogs(c.id);
     switchTab('logs');
   } else if (item.type === 'compose') {
+    setScheduledTabVisible(true);
     if (!stacksByID[item.id]) {
       await fetchStacks({ silent: true });
     }
@@ -199,9 +203,12 @@ async function selectItem(item) {
       ['Stack ID', item.id],
     ], { restart: stackRow?.restart || null });
     $('details').textContent = JSON.stringify(children, null, 2);
+    await fetchScheduledTasks(item.id, { silent: true });
+    renderScheduledTasks(item.id);
     stopLogs();
     switchTab('details');
   } else {
+    setScheduledTabVisible(false);
     renderStats([['Error', item.name]]);
     $('details').textContent = JSON.stringify(item, null, 2);
     stopLogs();
@@ -341,6 +348,120 @@ async function ensureComposeChildren(composeID) {
   return children;
 }
 
+function setScheduledTabVisible(visible) {
+  const tab = $('tabScheduled');
+  const panel = $('panelScheduled');
+  if (!tab || !panel) return;
+  tab.hidden = !visible;
+  panel.hidden = !visible;
+  if (!visible && document.querySelector('.tab.active')?.dataset.tab === 'scheduled') {
+    switchTab('details');
+  }
+}
+
+function fmtTime(raw) {
+  if (!raw) return '-';
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return String(raw);
+  return d.toLocaleString();
+}
+
+function renderScheduledTasks(stackID) {
+  const host = $('scheduledTasks');
+  if (!host) return;
+  host.innerHTML = '';
+  const tasks = scheduledTasksByStackID[stackID] || [];
+  if (tasks.length === 0) {
+    host.textContent = 'No scheduled scripts configured for this stack.';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'scheduled-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Cron</th>
+        <th>Timezone</th>
+        <th>File</th>
+        <th>Last Attempt</th>
+        <th>Exit</th>
+        <th>Result</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector('tbody');
+
+  tasks.forEach((task) => {
+    const row = document.createElement('tr');
+    const result = task.running ? 'running' : (task.last_result || '-');
+    row.innerHTML = `
+      <td>${escapeHTML(task.name || '-')}</td>
+      <td>${escapeHTML(task.cron || '-')}</td>
+      <td>${escapeHTML(task.timezone || 'Local')}</td>
+      <td>${escapeHTML(task.file || '-')}</td>
+      <td>${escapeHTML(fmtTime(task.last_attempt_at))}</td>
+      <td>${escapeHTML(task.last_exit_code === 0 || task.last_exit_code ? String(task.last_exit_code) : '-')}</td>
+      <td>${escapeHTML(result)}</td>
+      <td></td>
+    `;
+    const actionCell = row.querySelector('td:last-child');
+    const runBtn = document.createElement('button');
+    runBtn.textContent = task.running ? 'Running...' : 'Run now';
+    runBtn.disabled = Boolean(task.running);
+    runBtn.onclick = async () => {
+      if (!selected || selected.type !== 'compose') return;
+      runBtn.disabled = true;
+      runBtn.textContent = 'Running...';
+      setActionResult(`Running script ${task.name}...`);
+      try {
+        const out = await post(`/v1/scripts/${encodeURIComponent(stackID)}/${encodeURIComponent(task.name)}/run`);
+        const updated = out?.script;
+        const resultRow = out?.result || {};
+        if (updated) {
+          const rows = scheduledTasksByStackID[stackID] || [];
+          const idx = rows.findIndex((r) => r.name === updated.name);
+          if (idx >= 0) rows[idx] = updated;
+          else rows.push(updated);
+        }
+        renderScheduledTasks(stackID);
+        const exit = resultRow?.exit_code;
+        const failed = Number.isInteger(exit) && exit !== 0;
+        setActionResult(`Script ${task.name} finished (exit ${exit ?? 'unknown'}).`, failed);
+      } catch (err) {
+        setActionResult(`Script ${task.name} failed: ${err?.message || String(err)}`, true);
+        await fetchScheduledTasks(stackID, { silent: true });
+      }
+    };
+    actionCell.appendChild(runBtn);
+    tbody.appendChild(row);
+  });
+
+  host.appendChild(table);
+}
+
+async function fetchScheduledTasks(stackID, { silent = false } = {}) {
+  if (!stackID) return false;
+  try {
+    const res = await fetch(`/v1/scripts/${encodeURIComponent(stackID)}`);
+    if (!res.ok) throw new Error(`scheduled task request failed (${res.status})`);
+    const rows = await res.json();
+    scheduledTasksByStackID[stackID] = rows || [];
+    if (selected?.type === 'compose' && selected.id === stackID) {
+      renderScheduledTasks(stackID);
+    }
+    return true;
+  } catch (err) {
+    if (!silent) {
+      setActionResult(`Scheduled tasks refresh failed: ${err?.message || String(err)}`, true);
+    }
+    return false;
+  }
+}
+
 async function refreshSelectedDetails() {
   if (!selected) return;
 
@@ -398,6 +519,7 @@ async function refreshSelectedDetails() {
     }
     delete composeChildrenByID[selected.id];
     const children = await ensureComposeChildren(selected.id);
+    await fetchScheduledTasks(selected.id, { silent: true });
     const stackRow = stacksByID[selected.id];
     renderStats([
       ['Project', selected.name],
@@ -407,6 +529,7 @@ async function refreshSelectedDetails() {
       ['Stack ID', selected.id],
     ], { restart: stackRow?.restart || null });
     $('details').textContent = JSON.stringify(children, null, 2);
+    renderScheduledTasks(selected.id);
   }
 }
 
@@ -612,6 +735,15 @@ $('btnPopoutRaw').onclick = () => {
   window.open(url, '_blank', 'noopener,noreferrer');
   setActionResult('Opened raw log popout (main stream paused).');
 };
+$('btnScheduledRefresh').onclick = async () => {
+  if (selected?.type !== 'compose') {
+    setActionResult('Select a compose stack first.', true);
+    return;
+  }
+  await fetchScheduledTasks(selected.id);
+  renderScheduledTasks(selected.id);
+  setActionResult('Scheduled tasks refreshed.');
+};
 $('btnStart').onclick = async () => {
   if (selected?.type !== 'container') {
     setActionResult('Select a container first.', true);
@@ -690,6 +822,9 @@ function switchTab(tab) {
   if (tab === 'actionLogs' && $('tabActionLogs')?.hidden) {
     return;
   }
+  if (tab === 'scheduled' && $('tabScheduled')?.hidden) {
+    return;
+  }
   const previousTab = document.querySelector('.tab.active')?.dataset.tab;
   document.querySelectorAll('.tab').forEach((t) => {
     t.classList.toggle('active', t.dataset.tab === tab);
@@ -731,5 +866,10 @@ document.addEventListener('visibilitychange', () => {
   }, 4000);
   setInterval(() => {
     fetchStacks({ silent: true });
+  }, 15000);
+  setInterval(() => {
+    if (selected?.type === 'compose') {
+      fetchScheduledTasks(selected.id, { silent: true });
+    }
   }, 15000);
 })();

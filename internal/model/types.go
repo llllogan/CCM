@@ -86,6 +86,25 @@ type RestartDisplay struct {
 	Note     string `json:"note,omitempty"`
 }
 
+type ScriptTrackingEntry struct {
+	Key                 string    `json:"key"`
+	StackID             string    `json:"stack_id"`
+	TargetID            string    `json:"target_id"`
+	Name                string    `json:"name"`
+	Cron                string    `json:"cron"`
+	Timezone            string    `json:"timezone"`
+	File                string    `json:"file"`
+	Running             bool      `json:"running"`
+	LastAttemptAt       time.Time `json:"last_attempt_at,omitempty"`
+	LastSuccessAt       time.Time `json:"last_success_at,omitempty"`
+	LastResult          string    `json:"last_result,omitempty"`
+	LastExitCode        int       `json:"last_exit_code,omitempty"`
+	LastError           string    `json:"last_error,omitempty"`
+	ConsecutiveFailures int       `json:"consecutive_failures"`
+	ScheduledRuns       int       `json:"scheduled_runs"`
+	ManualRuns          int       `json:"manual_runs"`
+}
+
 type Container struct {
 	ID             string            `json:"id"`
 	ContainerID    string            `json:"container_id"`

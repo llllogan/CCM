@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/logs"
 	"github.com/loganjanssen/ccm/internal/model"
 	"github.com/loganjanssen/ccm/internal/restart"
+	"github.com/loganjanssen/ccm/internal/script"
 	"github.com/loganjanssen/ccm/internal/util"
 )
 
@@ -36,13 +38,14 @@ type Router struct {
 	control *control.Service
 	logs    *logs.Service
 	restart *restart.Service
+	scripts *script.Service
 	index   *template.Template
 	tpls    map[string]*template.Template
 	rawLogs []byte
 	themes  map[string]struct{}
 }
 
-func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, l *logs.Service, rs *restart.Service) http.Handler {
+func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
 	root, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		panic("static root missing")
@@ -78,6 +81,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		control: c,
 		logs:    l,
 		restart: rs,
+		scripts: ss,
 		index:   index,
 		tpls:    tpls,
 		rawLogs: rawLogs,
@@ -93,6 +97,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 	mux.HandleFunc("/v1/compose/", r.composeRoute)
 	mux.HandleFunc("/v1/deploy", r.deployRoute)
 	mux.HandleFunc("/v1/restarts/tracking", r.restartTracking)
+	mux.HandleFunc("/v1/scripts/", r.scriptRoute)
 
 	mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(assetsFS))))
 	mux.HandleFunc("/raw-logs.html", r.rawLogsPage)
@@ -288,6 +293,55 @@ func (r *Router) restartTracking(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	util.WriteJSON(w, 200, r.restart.Snapshot())
+}
+
+func (r *Router) scriptRoute(w http.ResponseWriter, req *http.Request) {
+	if r.scripts == nil {
+		util.WriteErr(w, 404, "scripts not configured")
+		return
+	}
+	path := strings.TrimPrefix(req.URL.Path, "/v1/scripts/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 1 && req.Method == http.MethodGet {
+		stackID, err := url.PathUnescape(parts[0])
+		if err != nil || strings.TrimSpace(stackID) == "" {
+			util.WriteErr(w, 400, "invalid stack id")
+			return
+		}
+		util.WriteJSON(w, 200, r.scripts.SnapshotByStack(stackID))
+		return
+	}
+	if len(parts) == 3 && parts[2] == "run" && req.Method == http.MethodPost {
+		stackID, err := url.PathUnescape(parts[0])
+		if err != nil || strings.TrimSpace(stackID) == "" {
+			util.WriteErr(w, 400, "invalid stack id")
+			return
+		}
+		scriptName, err := url.PathUnescape(parts[1])
+		if err != nil || strings.TrimSpace(scriptName) == "" {
+			util.WriteErr(w, 400, "invalid script name")
+			return
+		}
+		res, entry, runErr := r.scripts.RunNow(req.Context(), stackID, scriptName)
+		if runErr != nil {
+			if errors.Is(runErr, script.ErrScriptNotFound) {
+				util.WriteErr(w, 404, runErr.Error())
+				return
+			}
+			if errors.Is(runErr, script.ErrScriptRunning) {
+				util.WriteErr(w, 409, runErr.Error())
+				return
+			}
+			util.WriteErr(w, 400, runErr.Error())
+			return
+		}
+		util.WriteJSON(w, 200, map[string]any{
+			"script": entry,
+			"result": res,
+		})
+		return
+	}
+	util.WriteErr(w, 404, "not found")
 }
 
 func (r *Router) containerDetail(w http.ResponseWriter, req *http.Request, id string) {

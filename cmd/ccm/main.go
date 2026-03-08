@@ -57,7 +57,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         *listen,
-		Handler:      api.NewRouter(cfg, inv, deployer, controller, logSvc, restartSvc),
+		Handler:      api.NewRouter(cfg, inv, deployer, controller, logSvc, restartSvc, scriptSvc),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
