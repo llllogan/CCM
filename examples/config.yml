@@ -90,6 +90,11 @@ stacks:
       containers:
         jellyfin:
           strategy: nightly_4am_local
+    scripts:
+      - name: cleanup-cache-nightly
+        cron: "0 3 * * *"
+        file: clean-jellyfin-cache.sh
+        timezone: Australia/Brisbane
   pickeragent:
     target: pickeragent
     deploy_subdir: pickeragent

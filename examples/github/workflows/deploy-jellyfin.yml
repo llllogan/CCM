@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "jellyfin/**"
+      - "dockerops/jellyfin/**"
       - ".github/actions/ccm-deploy/**"
       - ".github/workflows/deploy-jellyfin.yml"
   workflow_dispatch:
@@ -32,9 +32,9 @@ jobs:
           ccm_stack: jellyfin
           repo: ${{ github.repository }}
           sha: ${{ github.sha }}
-          compose_path: jellyfin/docker-compose.yml
-          caddyfile_path: jellyfin/Caddyfile
-          scripts_dir_path: jellyfin/ccm_scripts
-          env_json_path: jellyfin/env.json
+          compose_path: dockerops/jellyfin/docker-compose.yml
+          caddyfile_path: dockerops/jellyfin/Caddyfile
+          scripts_dir_path: dockerops/jellyfin/ccm_scripts
+          env_json_path: dockerops/jellyfin/env.json
           all_secrets_json: ${{ toJSON(secrets) }}
           restart_after_deploy: "true"
