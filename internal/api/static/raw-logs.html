@@ -58,15 +58,27 @@
     }
 
     const es = new EventSource(`/v1/containers/${encodeURIComponent(id)}/logs/stream?tail=${encodeURIComponent(tail)}`);
+    let suppressNextError = false;
     es.onmessage = (evt) => {
       appendLine(evt.data);
     };
-    es.addEventListener('error', (evt) => {
+    es.addEventListener('terminal-error', (evt) => {
       if (evt && typeof evt.data === 'string' && evt.data.trim()) {
         appendLine(`[stream error] ${evt.data}`);
       }
+      suppressNextError = true;
+      es.close();
+    });
+    es.addEventListener('done', () => {
+      suppressNextError = true;
+      es.close();
     });
     es.onerror = () => {
+      appendLine('[stream error or disconnected]');
+      if (suppressNextError) {
+        suppressNextError = false;
+        return;
+      }
       appendLine('[stream error or disconnected]');
     };
   </script>

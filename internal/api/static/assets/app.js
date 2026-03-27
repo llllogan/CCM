@@ -5,6 +5,7 @@ let streamContainerID = null;
 let paused = false;
 const LOG_MAX_LINES = 2000;
 const LOG_FLUSH_INTERVAL_MS = 100;
+let suppressNextStreamError = false;
 const composeChildrenByID = {};
 const expandedCompose = new Set();
 const scheduledTasksByStackID = {};
@@ -349,12 +350,15 @@ function appendLogLine(line) {
   scheduleLogFlush();
 }
 
-function stopLogs({ clearSelection = true } = {}) {
+function stopLogs({ clearSelection = true, resetSuppress = true } = {}) {
   if (stream) {
     stream.close();
     stream = null;
   }
   flushLogOutput();
+  if (resetSuppress) {
+    suppressNextStreamError = false;
+  }
   setStreamIndicator('inactive');
   if (clearSelection) {
     streamContainerID = null;
@@ -377,7 +381,21 @@ function startLogs(id, { resetOutput = true } = {}) {
     if (paused) return;
     appendLogLine(evt.data);
   };
+  stream.addEventListener('terminal-error', (evt) => {
+    suppressNextStreamError = true;
+    setStreamIndicator('inactive');
+    appendLogLine(`[stream error] ${evt.data || 'log stream failed'}`);
+    stopLogs({ clearSelection: false, resetSuppress: false });
+  });
+  stream.addEventListener('done', () => {
+    suppressNextStreamError = true;
+    stopLogs({ clearSelection: false, resetSuppress: false });
+  });
   stream.onerror = () => {
+    if (suppressNextStreamError) {
+      suppressNextStreamError = false;
+      return;
+    }
     setStreamIndicator('inactive');
     appendLogLine('[stream error or disconnected]');
   };

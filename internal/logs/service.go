@@ -6,6 +6,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/loganjanssen/ccm/internal/config"
 	"github.com/loganjanssen/ccm/internal/sshx"
@@ -27,6 +28,14 @@ func (s *Service) StreamContainerLogs(ctx context.Context, id string, tail int, 
 	}
 	if _, ok := s.cfg.Targets[targetID]; !ok {
 		return fmt.Errorf("unknown target %q", targetID)
+	}
+	inspectCmd := "docker inspect -f '{{.HostConfig.LogConfig.Type}}' " + containerID
+	res, err := s.ssh.RunCommand(ctx, targetID, inspectCmd, 5*time.Second)
+	if err != nil {
+		return err
+	}
+	if strings.EqualFold(strings.TrimSpace(res.Stdout), "none") {
+		return fmt.Errorf("container logs unavailable: Docker logging driver is set to \"none\"")
 	}
 	if tail < 0 {
 		tail = 200

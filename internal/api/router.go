@@ -527,7 +527,7 @@ func (r *Router) containerLogs(w http.ResponseWriter, req *http.Request, id stri
 	writer := &sseWriter{w: w}
 	err := r.logs.StreamContainerLogs(ctx, id, tail, writer)
 	if err != nil {
-		fmt.Fprintf(w, "event: error\ndata: %s\n\n", strings.ReplaceAll(err.Error(), "\n", " "))
+		fmt.Fprintf(w, "event: terminal-error\ndata: %s\n\n", strings.ReplaceAll(err.Error(), "\n", " "))
 		flusher.Flush()
 		return
 	}
