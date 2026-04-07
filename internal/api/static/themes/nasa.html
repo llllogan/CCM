@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CCM Console</title>
+  <link rel="stylesheet" href="/assets/base.css" />
+  <link rel="stylesheet" href="/assets/themes/{{.Theme}}.css" />
+</head>
+<body class="theme-{{.Theme}}">
+  <div class="desktop-bg nasa-desktop">
+    <div class="window-shell nasa-console">
+      <div class="nasa-topbar">
+        <div class="nasa-callout">
+          <span class="nasa-callout-label">Program</span>
+          <strong>CCM Flight Deck</strong>
+        </div>
+        <div class="nasa-top-center">
+          <span id="streamDot" class="title-dot nasa-stream-dot" title="Log stream disconnected"></span>
+          <strong class="nasa-mission-title">Lunar Systems Control</strong>
+        </div>
+        <div class="nasa-callout nasa-callout-right">
+          <span class="nasa-callout-label">Console</span>
+          <span>GUIDO / CSM-OPS</span>
+        </div>
+      </div>
+
+      <div class="nasa-band">
+        <span class="nasa-chip nasa-chip-live">LIVE TELEMETRY</span>
+        <span class="nasa-chip">DOCKING RING BUS</span>
+        <span class="nasa-chip">CRYO LOOP NOMINAL</span>
+        <span class="nasa-chip nasa-chip-accent">SATURN STAGE INTERNALS</span>
+      </div>
+
+      <div class="app nasa-app">
+        <aside class="sidebar panel-frame nasa-sidebar">
+          <div class="panel-title nasa-panel-title">Surface Grid</div>
+          <label class="field-label nasa-field-label" for="search">Acquire Target</label>
+          <input id="search" placeholder="container, stack, host machine" />
+          <div id="items" class="items"></div>
+        </aside>
+
+        <main class="main panel-frame nasa-main">
+          <header class="header nasa-header">
+            <div class="nasa-headings">
+              <div class="nasa-header-kicker">Vehicle Selection</div>
+              <h1 id="title">Select an item</h1>
+              <div id="subtitle" class="muted nasa-subtitle">No host machine selected</div>
+            </div>
+            <div class="nasa-header-status">
+              <span class="nasa-status-label">Mission State</span>
+              <span id="status" class="badge nasa-badge">idle</span>
+            </div>
+          </header>
+
+          <section class="stats nasa-stats" id="stats"></section>
+
+          <section class="actions nasa-actions">
+            <button id="btnStart">Start</button>
+            <button id="btnStop">Stop</button>
+            <button id="btnRestart">Restart</button>
+            <button id="btnRedeploy">Redeploy</button>
+          </section>
+          <div id="actionResult" class="action-result muted nasa-action-result">Ready.</div>
+
+          <section class="tabs panel-frame-inset nasa-tabs">
+            <button data-tab="logs" class="tab active">Telemetry</button>
+            <button data-tab="details" class="tab">Readout</button>
+            <button id="tabScheduled" data-tab="scheduled" class="tab" hidden>Flight Queue</button>
+            <button id="tabActionLogs" data-tab="actionLogs" class="tab" hidden>Burn Logs</button>
+          </section>
+
+          <section id="panelLogs" class="panel panel-active panel-frame-inset nasa-panel">
+            <div class="log-controls nasa-log-controls">
+              <button id="btnPause">Pause</button>
+              <button id="btnClear">Clear</button>
+              <button id="btnCopyLast100">Copy Last 100</button>
+              <button id="btnPopoutRaw">Popout Raw</button>
+              <label><input type="checkbox" id="autoScroll" checked /> Auto-scroll</label>
+            </div>
+            <pre id="logs" class="logs"></pre>
+          </section>
+
+          <section id="panelDetails" class="panel panel-frame-inset nasa-panel">
+            <pre id="details"></pre>
+          </section>
+
+          <section id="panelScheduled" class="panel panel-frame-inset nasa-panel" hidden>
+            <div class="scheduled-controls nasa-scheduled-controls">
+              <button id="btnScheduledRefresh">Refresh</button>
+            </div>
+            <div id="scheduledTasks" class="scheduled-tasks"></div>
+          </section>
+
+          <section id="panelActionLogs" class="panel panel-frame-inset nasa-panel" hidden>
+            <pre id="actionLogs" class="logs"></pre>
+          </section>
+        </main>
+      </div>
+
+      <div class="statusbar nasa-statusbar">
+        <div class="status-segment nasa-status-segment">CCM GUIDANCE LOOP STABLE</div>
+        <div class="status-segment nasa-status-segment nasa-status-clock" id="clock">--:--:--</div>
+      </div>
+    </div>
+  </div>
+  <script src="/assets/app.js"></script>
+</body>
+</html>
