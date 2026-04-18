@@ -16,21 +16,55 @@
     const params = new URLSearchParams(location.search);
     const id = params.get('id');
     const tail = params.get('tail') || '200';
+    const MAX_LINES = 10000;
+    const FLUSH_INTERVAL_MS = 100;
+    let lines = [];
+    let pending = [];
+    let flushTimer = null;
+    let dropped = 0;
 
     if (!id) {
       out.textContent = 'missing container id';
       throw new Error('missing container id');
     }
 
+    function flush() {
+      flushTimer = null;
+      if (pending.length === 0) return;
+      const next = pending;
+      pending = [];
+      lines.push(...next);
+      let rebuild = false;
+      if (lines.length > MAX_LINES) {
+        dropped += lines.length - MAX_LINES;
+        lines = lines.slice(-MAX_LINES);
+        rebuild = true;
+      }
+      if (rebuild) {
+        const prefix = dropped > 0
+          ? [`[truncated log output; keeping last ${MAX_LINES} lines, dropped ${dropped}]`]
+          : [];
+        out.textContent = prefix.concat(lines).join('\n') + '\n';
+      } else {
+        out.append(document.createTextNode(next.join('\n') + '\n'));
+      }
+      out.scrollTop = out.scrollHeight;
+    }
+
+    function appendLine(line) {
+      pending.push(line);
+      if (flushTimer) return;
+      flushTimer = setTimeout(flush, FLUSH_INTERVAL_MS);
+    }
+
     const es = new EventSource(`/v1/containers/${encodeURIComponent(id)}/logs/stream?tail=${encodeURIComponent(tail)}`);
     let suppressNextError = false;
     es.onmessage = (evt) => {
-      out.textContent += evt.data + '\n';
-      out.scrollTop = out.scrollHeight;
+      appendLine(evt.data);
     };
     es.addEventListener('terminal-error', (evt) => {
       if (evt && typeof evt.data === 'string' && evt.data.trim()) {
-        out.textContent += `[stream error] ${evt.data}\n`;
+        appendLine(`[stream error] ${evt.data}`);
       }
       suppressNextError = true;
       es.close();
@@ -40,11 +74,12 @@
       es.close();
     });
     es.onerror = () => {
+      appendLine('[stream error or disconnected]');
       if (suppressNextError) {
         suppressNextError = false;
         return;
       }
-      out.textContent += '[stream error or disconnected]\n';
+      appendLine('[stream error or disconnected]');
     };
   </script>
 </body>

@@ -3,6 +3,8 @@ let selected = null;
 let stream = null;
 let streamContainerID = null;
 let paused = false;
+const LOG_MAX_LINES = 2000;
+const LOG_FLUSH_INTERVAL_MS = 100;
 let suppressNextStreamError = false;
 const composeChildrenByID = {};
 const expandedCompose = new Set();
@@ -12,6 +14,10 @@ let actionLogCountdownTimer = null;
 let actionLogCountdownRemaining = 0;
 let actionLogShouldAutoClose = false;
 const stacksByID = {};
+let logLines = [];
+let pendingLogLines = [];
+let logFlushTimer = null;
+let droppedLogLineCount = 0;
 
 const $ = (id) => document.getElementById(id);
 
@@ -292,12 +298,67 @@ function setStreamIndicator(state) {
   dot.title = title;
 }
 
-function stopLogs({ clearSelection = true } = {}) {
+function resetLogOutput() {
+  logLines = [];
+  pendingLogLines = [];
+  droppedLogLineCount = 0;
+  if (logFlushTimer) {
+    clearTimeout(logFlushTimer);
+    logFlushTimer = null;
+  }
+  $('logs').textContent = '';
+}
+
+function flushLogOutput() {
+  logFlushTimer = null;
+  if (pendingLogLines.length === 0) return;
+
+  const out = $('logs');
+  const shouldScroll = $('autoScroll').checked;
+  const nextLines = pendingLogLines;
+  pendingLogLines = [];
+  logLines.push(...nextLines);
+
+  let needsRebuild = false;
+  if (logLines.length > LOG_MAX_LINES) {
+    droppedLogLineCount += logLines.length - LOG_MAX_LINES;
+    logLines = logLines.slice(-LOG_MAX_LINES);
+    needsRebuild = true;
+  }
+
+  if (needsRebuild) {
+    const prefix = droppedLogLineCount > 0
+      ? [`[truncated log output; keeping last ${LOG_MAX_LINES} lines, dropped ${droppedLogLineCount}]`]
+      : [];
+    out.textContent = prefix.concat(logLines).join('\n') + '\n';
+  } else {
+    out.append(document.createTextNode(nextLines.join('\n') + '\n'));
+  }
+
+  if (shouldScroll) {
+    out.scrollTop = out.scrollHeight;
+  }
+}
+
+function scheduleLogFlush() {
+  if (logFlushTimer) return;
+  logFlushTimer = setTimeout(flushLogOutput, LOG_FLUSH_INTERVAL_MS);
+}
+
+function appendLogLine(line) {
+  pendingLogLines.push(line);
+  scheduleLogFlush();
+}
+
+function stopLogs({ clearSelection = true, resetSuppress = true } = {}) {
   if (stream) {
     stream.close();
     stream = null;
   }
-  suppressNextStreamError = false;
+  flushLogOutput();
+  if (resetSuppress) {
+    suppressNextStreamError = false;
+  }
   setStreamIndicator('inactive');
   if (clearSelection) {
     streamContainerID = null;
@@ -308,7 +369,7 @@ function startLogs(id, { resetOutput = true } = {}) {
   streamContainerID = id;
   stopLogs({ clearSelection: false });
   if (resetOutput) {
-    $('logs').textContent = '';
+    resetLogOutput();
   }
   setStreamIndicator('connecting');
   const tail = resetOutput ? 200 : 0;
@@ -318,20 +379,17 @@ function startLogs(id, { resetOutput = true } = {}) {
   };
   stream.onmessage = (evt) => {
     if (paused) return;
-    $('logs').textContent += evt.data + '\n';
-    if ($('autoScroll').checked) {
-      $('logs').scrollTop = $('logs').scrollHeight;
-    }
+    appendLogLine(evt.data);
   };
   stream.addEventListener('terminal-error', (evt) => {
     suppressNextStreamError = true;
     setStreamIndicator('inactive');
-    $('logs').textContent += `[stream error] ${evt.data || 'log stream failed'}\n`;
-    stopLogs({ clearSelection: false });
+    appendLogLine(`[stream error] ${evt.data || 'log stream failed'}`);
+    stopLogs({ clearSelection: false, resetSuppress: false });
   });
   stream.addEventListener('done', () => {
     suppressNextStreamError = true;
-    stopLogs({ clearSelection: false });
+    stopLogs({ clearSelection: false, resetSuppress: false });
   });
   stream.onerror = () => {
     if (suppressNextStreamError) {
@@ -339,7 +397,7 @@ function startLogs(id, { resetOutput = true } = {}) {
       return;
     }
     setStreamIndicator('inactive');
-    $('logs').textContent += '[stream error or disconnected]\n';
+    appendLogLine('[stream error or disconnected]');
   };
 }
 
@@ -724,10 +782,11 @@ $('btnPause').onclick = () => {
   $('btnPause').textContent = paused ? 'Resume' : 'Pause';
 };
 $('btnClear').onclick = () => {
-  $('logs').textContent = '';
+  resetLogOutput();
 };
 $('btnCopyLast100').onclick = async () => {
-  const lines = $('logs').textContent.split('\n').filter(Boolean);
+  flushLogOutput();
+  const lines = logLines.slice();
   const tail = lines.slice(-100).join('\n');
   if (!tail) {
     setActionResult('No log lines to copy.', true);
