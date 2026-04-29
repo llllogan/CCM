@@ -74,6 +74,17 @@ func (m *Manager) RunCommand(ctx context.Context, targetID, cmd string, timeout 
 	if err != nil {
 		return model.CommandResult{}, err
 	}
+	res, err := run(ctx, client, cmd, timeout)
+	if err == nil || !isRetryableConnErr(err) {
+		return res, err
+	}
+	if rerr := m.resetClient(tc); rerr != nil {
+		return model.CommandResult{}, rerr
+	}
+	client, err = m.controlClient(tc)
+	if err != nil {
+		return model.CommandResult{}, err
+	}
 	return run(ctx, client, cmd, timeout)
 }
 
@@ -86,13 +97,27 @@ func (m *Manager) WriteFile(ctx context.Context, targetID, remotePath string, co
 	if err != nil {
 		return err
 	}
+	err = m.writeFileWithClient(ctx, client, remotePath, content, mode, timeout)
+	if err == nil || !isRetryableConnErr(err) {
+		return err
+	}
+	if rerr := m.resetClient(tc); rerr != nil {
+		return rerr
+	}
+	client, err = m.controlClient(tc)
+	if err != nil {
+		return err
+	}
+	return m.writeFileWithClient(ctx, client, remotePath, content, mode, timeout)
+}
 
+func (m *Manager) writeFileWithClient(ctx context.Context, client *ssh.Client, remotePath string, content []byte, mode string, timeout time.Duration) error {
 	session, err := client.NewSession()
 	if err != nil {
-		_ = m.resetClient(tc)
 		return err
 	}
 	defer session.Close()
+
 	var stderr bytes.Buffer
 	session.Stderr = &stderr
 
@@ -363,4 +388,17 @@ func agentSigner(conn net.Conn) func() ([]ssh.Signer, error) {
 		c := agent.NewClient(conn)
 		return c.Signers()
 	}
+}
+
+func isRetryableConnErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection reset by peer") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "use of closed network connection")
 }
