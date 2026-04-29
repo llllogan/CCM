@@ -23,6 +23,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/model"
 	"github.com/loganjanssen/ccm/internal/restart"
 	"github.com/loganjanssen/ccm/internal/script"
+	ccmstatus "github.com/loganjanssen/ccm/internal/status"
 	"github.com/loganjanssen/ccm/internal/util"
 )
 
@@ -39,6 +40,7 @@ type Router struct {
 	logs    *logs.Service
 	restart *restart.Service
 	scripts *script.Service
+	status  *ccmstatus.Service
 	index   *template.Template
 	tpls    map[string]*template.Template
 	rawLogs []byte
@@ -82,6 +84,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		logs:    l,
 		restart: rs,
 		scripts: ss,
+		status:  ccmstatus.NewService(cfg, inv, rs, ss),
 		index:   index,
 		tpls:    tpls,
 		rawLogs: rawLogs,
@@ -92,6 +95,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 	mux.HandleFunc("/healthz", r.health)
 	mux.HandleFunc("/v1/stacks", r.stacks)
 	mux.HandleFunc("/v1/inventory", r.inventory)
+	mux.HandleFunc("/v1/summary", r.summary)
 	mux.HandleFunc("/v1/items/", r.itemChildren)
 	mux.HandleFunc("/v1/containers/", r.containerRoute)
 	mux.HandleFunc("/v1/compose/", r.composeRoute)
@@ -215,6 +219,14 @@ func (r *Router) inventory(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+func (r *Router) summary(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		util.WriteErr(w, 405, "method not allowed")
+		return
+	}
+	util.WriteJSON(w, 200, r.status.Summary(req.Context()))
+}
+
 func (r *Router) itemChildren(w http.ResponseWriter, req *http.Request) {
 	if !strings.HasSuffix(req.URL.Path, "/children") {
 		util.WriteErr(w, 404, "not found")
@@ -238,6 +250,10 @@ func (r *Router) containerRoute(w http.ResponseWriter, req *http.Request) {
 	}
 	if len(parts) == 2 && req.Method == http.MethodPost {
 		r.containerAction(w, req, parts[0], parts[1])
+		return
+	}
+	if len(parts) == 2 && parts[1] == "logs" && req.Method == http.MethodGet {
+		r.containerLogTail(w, req, parts[0])
 		return
 	}
 	if len(parts) == 3 && parts[1] == "logs" && parts[2] == "stream" && req.Method == http.MethodGet {
@@ -533,6 +549,21 @@ func (r *Router) containerLogs(w http.ResponseWriter, req *http.Request, id stri
 	}
 	fmt.Fprint(w, "event: done\ndata: eof\n\n")
 	flusher.Flush()
+}
+
+func (r *Router) containerLogTail(w http.ResponseWriter, req *http.Request, id string) {
+	tail := 250
+	if raw := req.URL.Query().Get("tail"); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil {
+			tail = n
+		}
+	}
+	out, err := r.logs.ReadContainerLogs(req.Context(), id, tail)
+	if err != nil {
+		util.WriteErr(w, 400, err.Error())
+		return
+	}
+	util.WriteJSON(w, 200, out)
 }
 
 type sseWriter struct {

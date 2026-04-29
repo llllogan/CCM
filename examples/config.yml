@@ -3,6 +3,16 @@ auth_token: "replace-with-long-random-token"
 inventory_ttl_seconds: 3
 restart_state_file: /tmp/ccm-restart-state.json
 
+notifications:
+  clive:
+    enabled: false
+    webhook_url: "http://clive.local:3456/webhooks/inbound"
+    token: "replace-with-clive-inbound-webhook-token"
+    user_number: "+15555555555"
+    min_severity: warning
+    cooldown: 15m
+    include_logs_tail: 80
+
 restart_strategies:
   nightly_4am_local:
     cron: "0 4 * * *"

@@ -111,6 +111,7 @@ type Container struct {
 	Name           string            `json:"name"`
 	Image          string            `json:"image"`
 	Status         string            `json:"status"`
+	Health         string            `json:"health,omitempty"`
 	RestartCount   int               `json:"restart_count"`
 	Ports          []string          `json:"ports"`
 	TargetID       string            `json:"target_id"`
@@ -167,4 +168,60 @@ type CommandResult struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`
 	ExitCode int    `json:"exit_code"`
+}
+
+type ContainerLogsResponse struct {
+	ContainerID string   `json:"container_id"`
+	Tail        int      `json:"tail"`
+	Truncated   bool     `json:"truncated"`
+	Lines       []string `json:"lines"`
+}
+
+type TargetSummary struct {
+	TargetID string `json:"target_id"`
+	Status   string `json:"status"`
+	Error    string `json:"error,omitempty"`
+}
+
+type SummaryContainer struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Status         string `json:"status"`
+	Health         string `json:"health,omitempty"`
+	RestartCount   int    `json:"restart_count"`
+	Uptime         string `json:"uptime"`
+	ContainerID    string `json:"container_id"`
+	TargetID       string `json:"target_id"`
+	ComposeProject string `json:"compose_project,omitempty"`
+}
+
+type StackSummary struct {
+	StackID     string             `json:"stack_id"`
+	TargetID    string             `json:"target_id"`
+	ProjectName string             `json:"project_name"`
+	Status      string             `json:"status"`
+	Containers  []SummaryContainer `json:"containers"`
+	Reason      string             `json:"reason,omitempty"`
+}
+
+type SystemSummary struct {
+	Status          string                 `json:"status"`
+	Targets         []TargetSummary        `json:"targets"`
+	Stacks          []StackSummary         `json:"stacks"`
+	RestartFailures []RestartTrackingEntry `json:"restart_failures"`
+	ScriptFailures  []ScriptTrackingEntry  `json:"script_failures"`
+}
+
+type NotificationConfig struct {
+	Clive CliveNotificationConfig `yaml:"clive" json:"clive"`
+}
+
+type CliveNotificationConfig struct {
+	Enabled         bool   `yaml:"enabled" json:"enabled"`
+	WebhookURL      string `yaml:"webhook_url" json:"webhook_url"`
+	Token           string `yaml:"token" json:"-"`
+	UserNumber      string `yaml:"user_number" json:"user_number"`
+	MinSeverity     string `yaml:"min_severity" json:"min_severity"`
+	Cooldown        string `yaml:"cooldown" json:"cooldown"`
+	IncludeLogsTail int    `yaml:"include_logs_tail" json:"include_logs_tail"`
 }

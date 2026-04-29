@@ -17,9 +17,11 @@ import (
 	"github.com/loganjanssen/ccm/internal/deploy"
 	"github.com/loganjanssen/ccm/internal/inventory"
 	"github.com/loganjanssen/ccm/internal/logs"
+	"github.com/loganjanssen/ccm/internal/notify"
 	"github.com/loganjanssen/ccm/internal/restart"
 	"github.com/loganjanssen/ccm/internal/script"
 	"github.com/loganjanssen/ccm/internal/sshx"
+	ccmstatus "github.com/loganjanssen/ccm/internal/status"
 )
 
 func main() {
@@ -54,6 +56,10 @@ func main() {
 	}
 	scriptSvc.Start(context.Background())
 	defer scriptSvc.Stop()
+	statusSvc := ccmstatus.NewService(cfg, inv, restartSvc, scriptSvc)
+	notifySvc := notify.NewService(cfg.Notifications.Clive, statusSvc, logSvc)
+	notifySvc.Start(context.Background())
+	defer notifySvc.Stop()
 
 	srv := &http.Server{
 		Addr:         *listen,

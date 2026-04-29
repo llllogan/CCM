@@ -151,6 +151,22 @@ func (s *Service) SnapshotByStack(stackID string) []model.ScriptTrackingEntry {
 	return entries
 }
 
+func (s *Service) Snapshot() []model.ScriptTrackingEntry {
+	entries := make([]model.ScriptTrackingEntry, 0)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, row := range s.tracking {
+		entries = append(entries, row)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].StackID == entries[j].StackID {
+			return entries[i].Name < entries[j].Name
+		}
+		return entries[i].StackID < entries[j].StackID
+	})
+	return entries
+}
+
 func (s *Service) RunNow(ctx context.Context, stackID, scriptName string) (model.CommandResult, model.ScriptTrackingEntry, error) {
 	a, ok := s.findAssignment(stackID, scriptName)
 	if !ok {

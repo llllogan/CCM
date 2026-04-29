@@ -159,6 +159,9 @@ type inspectState struct {
 	Status       string `json:"Status"`
 	RestartCount int    `json:"RestartCount"`
 	StartedAt    string `json:"StartedAt"`
+	Health       *struct {
+		Status string `json:"Status"`
+	} `json:"Health"`
 }
 
 type inspectNet struct {
@@ -194,6 +197,7 @@ func (s *Service) parseInspect(targetID, raw string) ([]model.Container, []model
 			Name:           name,
 			Image:          c.Config.Image,
 			Status:         c.State.Status,
+			Health:         healthStatus(c.State),
 			RestartCount:   c.State.RestartCount,
 			Ports:          ports,
 			TargetID:       targetID,
@@ -211,7 +215,7 @@ func (s *Service) parseInspect(targetID, raw string) ([]model.Container, []model
 	for proj, cs := range byProject {
 		status := "running"
 		for _, c := range cs {
-			if c.Status != "running" {
+			if c.Status != "running" || c.Health == "unhealthy" {
 				status = "degraded"
 				break
 			}
@@ -230,6 +234,13 @@ func (s *Service) parseInspect(targetID, raw string) ([]model.Container, []model
 	}
 	sort.Slice(projects, func(i, j int) bool { return projects[i].ProjectName < projects[j].ProjectName })
 	return containers, projects, nil
+}
+
+func healthStatus(state inspectState) string {
+	if state.Health == nil {
+		return ""
+	}
+	return strings.TrimSpace(state.Health.Status)
 }
 
 func (s *Service) matchStack(targetID, project string) string {

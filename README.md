@@ -124,6 +124,24 @@ Time tracking behavior:
 - Tracking keeps last attempt/success time, last result, last exit code, and consecutive failures.
 - Endpoint: `GET /v1/restarts/tracking`.
 
+### Clive notifications
+
+CCM can notify Clive when targets, stacks, containers, scheduled restarts, or scheduled scripts look broken. This is optional and disabled by default.
+
+```yaml
+notifications:
+  clive:
+    enabled: true
+    webhook_url: "http://clive.local:3456/webhooks/inbound"
+    token: "same-value-as-clive-INBOUND_WEBHOOK_TOKEN"
+    user_number: "+15555555555"
+    min_severity: warning
+    cooldown: 15m
+    include_logs_tail: 80
+```
+
+When enabled, CCM posts to Clive's inbound webhook on unhealthy state transitions and after the configured cooldown if the issue is still active. If `include_logs_tail` is greater than zero, container alerts include a bounded recent log slice for Clive to summarize.
+
 ### Host Script Schedules (scheduled host commands)
 
 CCM can also run host-side shell scripts on a cron schedule per stack.
@@ -252,10 +270,13 @@ If your workflow uses only merged `env` (no `env_file`), the final `.env` is gen
 ### API endpoints
 
 - `GET /healthz`
+- `GET /v1/summary`
 - `GET /v1/stacks`
 - `GET /v1/inventory`
 - `GET /v1/items/{id}/children`
 - `GET /v1/containers/{id}`
+- `GET /v1/containers/{id}/logs?tail=250`
+- `GET /v1/containers/{id}/logs/stream?tail=200`
 - `POST /v1/containers/{id}/start`
 - `POST /v1/containers/{id}/stop`
 - `POST /v1/containers/{id}/restart`

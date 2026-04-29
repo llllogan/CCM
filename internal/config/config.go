@@ -23,6 +23,7 @@ type Config struct {
 	RestartStrategies   map[string]model.RestartStrategy `yaml:"restart_strategies"`
 	RestartStateFile    string                           `yaml:"restart_state_file"`
 	InventoryTTLSeconds int                              `yaml:"inventory_ttl_seconds"`
+	Notifications       model.NotificationConfig         `yaml:"notifications"`
 }
 
 var stackIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -166,6 +167,24 @@ func (c *Config) Validate() error {
 			if _, err := time.LoadLocation(tz); err != nil {
 				errs = append(errs, fmt.Sprintf("restart strategy %q timezone invalid: %v", name, err))
 			}
+		}
+	}
+	if c.Notifications.Clive.Enabled {
+		if strings.TrimSpace(c.Notifications.Clive.WebhookURL) == "" {
+			errs = append(errs, "notifications.clive.webhook_url is required when enabled")
+		}
+		if strings.TrimSpace(c.Notifications.Clive.UserNumber) == "" {
+			errs = append(errs, "notifications.clive.user_number is required when enabled")
+		}
+		if raw := strings.TrimSpace(c.Notifications.Clive.Cooldown); raw != "" {
+			if _, err := time.ParseDuration(raw); err != nil {
+				errs = append(errs, fmt.Sprintf("notifications.clive.cooldown invalid: %v", err))
+			}
+		}
+		switch strings.ToLower(strings.TrimSpace(c.Notifications.Clive.MinSeverity)) {
+		case "", "info", "warning", "critical":
+		default:
+			errs = append(errs, "notifications.clive.min_severity must be info, warning, or critical")
 		}
 	}
 
