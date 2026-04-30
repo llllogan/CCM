@@ -18,6 +18,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/config"
 	"github.com/loganjanssen/ccm/internal/control"
 	"github.com/loganjanssen/ccm/internal/deploy"
+	"github.com/loganjanssen/ccm/internal/dockermaint"
 	"github.com/loganjanssen/ccm/internal/inventory"
 	"github.com/loganjanssen/ccm/internal/logs"
 	"github.com/loganjanssen/ccm/internal/model"
@@ -37,6 +38,7 @@ type Router struct {
 	inv     *inventory.Service
 	deploy  *deploy.Service
 	control *control.Service
+	docker  *dockermaint.Service
 	logs    *logs.Service
 	restart *restart.Service
 	scripts *script.Service
@@ -47,7 +49,7 @@ type Router struct {
 	themes  map[string]struct{}
 }
 
-func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
+func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, dm *dockermaint.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
 	root, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		panic("static root missing")
@@ -81,6 +83,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		inv:     inv,
 		deploy:  d,
 		control: c,
+		docker:  dm,
 		logs:    l,
 		restart: rs,
 		scripts: ss,
@@ -97,6 +100,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 	mux.HandleFunc("/v1/inventory", r.inventory)
 	mux.HandleFunc("/v1/summary", r.summary)
 	mux.HandleFunc("/v1/items/", r.itemChildren)
+	mux.HandleFunc("/v1/targets/", r.targetRoute)
 	mux.HandleFunc("/v1/containers/", r.containerRoute)
 	mux.HandleFunc("/v1/compose/", r.composeRoute)
 	mux.HandleFunc("/v1/deploy", r.deployRoute)
@@ -239,6 +243,63 @@ func (r *Router) itemChildren(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	util.WriteJSON(w, 200, cs)
+}
+
+func (r *Router) targetRoute(w http.ResponseWriter, req *http.Request) {
+	path := strings.TrimPrefix(req.URL.Path, "/v1/targets/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 3 || parts[1] != "docker" {
+		util.WriteErr(w, 404, "not found")
+		return
+	}
+	targetID, err := url.PathUnescape(parts[0])
+	if err != nil || strings.TrimSpace(targetID) == "" {
+		util.WriteErr(w, 400, "invalid target id")
+		return
+	}
+	if r.docker == nil {
+		util.WriteErr(w, 404, "docker maintenance not configured")
+		return
+	}
+
+	switch {
+	case parts[2] == "df" && req.Method == http.MethodGet:
+		out, err := r.docker.DiskReport(req.Context(), targetID)
+		if err != nil {
+			util.WriteErr(w, 400, err.Error())
+			return
+		}
+		util.WriteJSON(w, 200, out)
+		return
+	case parts[2] == "safe-prune" && req.Method == http.MethodPost:
+		if !r.authorized(req) {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			util.WriteErr(w, 401, "unauthorized")
+			return
+		}
+		out, err := r.docker.SafePrune(req.Context(), targetID)
+		if err != nil {
+			if errors.Is(err, dockermaint.ErrMaintenanceRunning) {
+				util.WriteErr(w, 409, err.Error())
+				return
+			}
+			util.WriteErr(w, 400, err.Error())
+			return
+		}
+		r.inv.InvalidateTarget(targetID)
+		util.WriteJSON(w, 200, out)
+		return
+	}
+	util.WriteErr(w, 404, "not found")
+}
+
+func (r *Router) authorized(req *http.Request) bool {
+	token := strings.TrimSpace(r.cfg.AuthToken)
+	if token == "" {
+		return true
+	}
+	auth := strings.TrimSpace(req.Header.Get("authorization"))
+	return auth == "Bearer "+token
 }
 
 func (r *Router) containerRoute(w http.ResponseWriter, req *http.Request) {

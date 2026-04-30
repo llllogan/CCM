@@ -177,6 +177,18 @@ type ContainerLogsResponse struct {
 	Lines       []string `json:"lines"`
 }
 
+type DockerMaintenanceResult struct {
+	TargetID        string    `json:"target_id"`
+	Operation       string    `json:"operation"`
+	StartedAt       time.Time `json:"started_at"`
+	DurationMillis  int64     `json:"duration_millis"`
+	ExitCode        int       `json:"exit_code"`
+	Stdout          string    `json:"stdout"`
+	Stderr          string    `json:"stderr,omitempty"`
+	StdoutTruncated bool      `json:"stdout_truncated"`
+	StderrTruncated bool      `json:"stderr_truncated"`
+}
+
 type TargetSummary struct {
 	TargetID string `json:"target_id"`
 	Status   string `json:"status"`

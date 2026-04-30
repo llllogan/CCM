@@ -274,6 +274,8 @@ If your workflow uses only merged `env` (no `env_file`), the final `.env` is gen
 - `GET /v1/stacks`
 - `GET /v1/inventory`
 - `GET /v1/items/{id}/children`
+- `GET /v1/targets/{id}/docker/df`
+- `POST /v1/targets/{id}/docker/safe-prune`
 - `GET /v1/containers/{id}`
 - `GET /v1/containers/{id}/logs?tail=250`
 - `GET /v1/containers/{id}/logs/stream?tail=200`
@@ -284,6 +286,8 @@ If your workflow uses only merged `env` (no `env_file`), the final `.env` is gen
 - `POST /v1/deploy`
 - `GET /v1/containers/{id}/logs/stream?tail=200`
 - `GET /v1/restarts/tracking`
+
+Docker maintenance endpoints are fixed-command operations. `GET /v1/targets/{id}/docker/df` runs a read-only disk usage report. `POST /v1/targets/{id}/docker/safe-prune` prunes stopped containers older than 24 hours and unused images, build cache, and networks older than 7 days. It intentionally does not prune Docker volumes. If `auth_token` is configured, safe-prune requires `Authorization: Bearer <auth_token>`.
 
 `POST /v1/deploy` request fields:
 
@@ -326,7 +330,7 @@ These examples send compose/caddy/env to CCM, then optionally force container re
 
 ### Security note
 
-`auth_token` exists in config examples, but current CCM API router does not enforce authentication headers. Deploy CCM only on trusted networks/VPN, or put it behind an authenticated reverse proxy.
+`auth_token` is currently enforced for Docker safe-prune only. Other CCM API routes should still be deployed only on trusted networks/VPN, or behind an authenticated reverse proxy.
 
 ## Local dev
 
