@@ -18,17 +18,27 @@ import (
 )
 
 type Service struct {
-	cfg  *config.Config
-	ssh  *sshx.Manager
-	mu   sync.Mutex
-	lock map[string]*sync.Mutex
+	cfg    *config.Config
+	ssh    remoteClient
+	pruner imagePruner
+	mu     sync.Mutex
+	lock   map[string]*sync.Mutex
+}
+
+type remoteClient interface {
+	RunCommand(ctx context.Context, targetID, cmd string, timeout time.Duration) (model.CommandResult, error)
+	WriteFile(ctx context.Context, targetID, remotePath string, content []byte, mode string, timeout time.Duration) error
+}
+
+type imagePruner interface {
+	ImagePrune(ctx context.Context, targetID string) (model.DockerMaintenanceResult, error)
 }
 
 var envKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var scriptFilePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+\.sh$`)
 
-func NewService(cfg *config.Config, ssh *sshx.Manager) *Service {
-	return &Service{cfg: cfg, ssh: ssh, lock: map[string]*sync.Mutex{}}
+func NewService(cfg *config.Config, ssh *sshx.Manager, pruner imagePruner) *Service {
+	return &Service{cfg: cfg, ssh: ssh, pruner: pruner, lock: map[string]*sync.Mutex{}}
 }
 
 func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[string]any, error) {
@@ -81,6 +91,14 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 		}
 	}
 
+	cleanup := model.DeployCleanupResult{
+		Status: "skipped",
+		Reason: "compose execution disabled",
+	}
+	if runCompose {
+		cleanup = s.pruneImages(ctx, stack.TargetID)
+	}
+
 	return map[string]any{
 		"stack":        req.CCMStack,
 		"target":       stack.TargetID,
@@ -92,7 +110,27 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 		"script_count": scriptCount,
 		"run_compose":  runCompose,
 		"steps":        results,
+		"image_prune":  cleanup,
 	}, nil
+}
+
+func (s *Service) pruneImages(ctx context.Context, targetID string) model.DeployCleanupResult {
+	if s.pruner == nil {
+		return model.DeployCleanupResult{
+			Status: "skipped",
+			Reason: "image pruning not configured",
+		}
+	}
+	result, err := s.pruner.ImagePrune(ctx, targetID)
+	cleanup := model.DeployCleanupResult{
+		Status: "succeeded",
+		Result: &result,
+	}
+	if err != nil {
+		cleanup.Status = "failed"
+		cleanup.Error = err.Error()
+	}
+	return cleanup
 }
 
 func (s *Service) RedeployStack(ctx context.Context, stackID string) (map[string]any, error) {
@@ -161,7 +199,7 @@ func (s *Service) runComposeUp(ctx context.Context, stack *model.CCMStack, deplo
 		}
 		results = append(results, res)
 		if res.ExitCode != 0 {
-			return results, nil
+			return results, fmt.Errorf("docker compose pull failed: %s", commandErrSummary(res))
 		}
 	}
 
@@ -178,6 +216,9 @@ func (s *Service) runComposeUp(ctx context.Context, stack *model.CCMStack, deplo
 		return nil, err
 	}
 	results = append(results, res)
+	if res.ExitCode != 0 {
+		return results, fmt.Errorf("docker compose up failed: %s", commandErrSummary(res))
+	}
 	return results, nil
 }
 

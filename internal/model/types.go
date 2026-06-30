@@ -170,6 +170,13 @@ type CommandResult struct {
 	ExitCode int    `json:"exit_code"`
 }
 
+type DeployCleanupResult struct {
+	Status string                   `json:"status"`
+	Result *DockerMaintenanceResult `json:"result,omitempty"`
+	Error  string                   `json:"error,omitempty"`
+	Reason string                   `json:"reason,omitempty"`
+}
+
 type ContainerLogsResponse struct {
 	ContainerID string   `json:"container_id"`
 	Tail        int      `json:"tail"`

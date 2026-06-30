@@ -237,7 +237,13 @@ CCM writes the received payload into the stack deploy directory on the target ho
 - writes `.env` when merged env data is non-empty
 - writes `ccm_scripts/<file>.sh` for each payload script
 
-Then CCM runs compose (`pull`/`up`) according to stack flags.
+After a successful API-triggered compose deployment, CCM runs
+`docker image prune -a -f` on the target host. Image pruning is serialized with
+other Docker maintenance on that target. Its outcome is returned separately in
+the `image_prune` response field, and a cleanup failure does not change a
+successful deployment into a failed deployment. Pruning is skipped when
+`run_compose` is `false`; compose redeploys, including CCM's detached
+self-redeploy, are unchanged.
 
 ### How `.env` is built from secrets and `env.json`
 

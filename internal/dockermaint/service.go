@@ -19,37 +19,46 @@ var ErrMaintenanceRunning = errors.New("docker maintenance already running for t
 
 type Service struct {
 	cfg *config.Config
-	ssh *sshx.Manager
+	ssh commandRunner
 
-	mu      sync.Mutex
-	running map[string]struct{}
+	mu    sync.Mutex
+	gates map[string]chan struct{}
+}
+
+type commandRunner interface {
+	RunCommand(ctx context.Context, targetID, cmd string, timeout time.Duration) (model.CommandResult, error)
 }
 
 func NewService(cfg *config.Config, ssh *sshx.Manager) *Service {
 	return &Service{
-		cfg:     cfg,
-		ssh:     ssh,
-		running: map[string]struct{}{},
+		cfg:   cfg,
+		ssh:   ssh,
+		gates: map[string]chan struct{}{},
 	}
 }
 
 func (s *Service) DiskReport(ctx context.Context, targetID string) (model.DockerMaintenanceResult, error) {
-	return s.run(ctx, targetID, "disk-report", dockerDiskReportCommand, 45*time.Second, false)
+	return s.run(ctx, targetID, "disk-report", dockerDiskReportCommand, 45*time.Second, false, false)
 }
 
 func (s *Service) SafePrune(ctx context.Context, targetID string) (model.DockerMaintenanceResult, error) {
-	return s.run(ctx, targetID, "safe-prune", dockerSafePruneCommand, 20*time.Minute, true)
+	return s.run(ctx, targetID, "safe-prune", dockerSafePruneCommand, 20*time.Minute, true, false)
 }
 
-func (s *Service) run(ctx context.Context, targetID, operation, cmd string, timeout time.Duration, exclusive bool) (model.DockerMaintenanceResult, error) {
+func (s *Service) ImagePrune(ctx context.Context, targetID string) (model.DockerMaintenanceResult, error) {
+	return s.run(ctx, targetID, "image-prune", dockerImagePruneCommand, 10*time.Minute, true, true)
+}
+
+func (s *Service) run(ctx context.Context, targetID, operation, cmd string, timeout time.Duration, exclusive, wait bool) (model.DockerMaintenanceResult, error) {
 	if _, ok := s.cfg.Targets[targetID]; !ok {
 		return model.DockerMaintenanceResult{}, fmt.Errorf("unknown target %q", targetID)
 	}
 	if exclusive {
-		if !s.markRunning(targetID) {
-			return model.DockerMaintenanceResult{}, ErrMaintenanceRunning
+		release, err := s.acquire(ctx, targetID, wait)
+		if err != nil {
+			return model.DockerMaintenanceResult{}, err
 		}
-		defer s.markFinished(targetID)
+		defer release()
 	}
 
 	started := time.Now()
@@ -83,20 +92,29 @@ func (s *Service) run(ctx context.Context, targetID, operation, cmd string, time
 	return result, nil
 }
 
-func (s *Service) markRunning(targetID string) bool {
+func (s *Service) acquire(ctx context.Context, targetID string, wait bool) (func(), error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.running[targetID]; ok {
-		return false
+	gate, ok := s.gates[targetID]
+	if !ok {
+		gate = make(chan struct{}, 1)
+		s.gates[targetID] = gate
 	}
-	s.running[targetID] = struct{}{}
-	return true
-}
+	s.mu.Unlock()
 
-func (s *Service) markFinished(targetID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.running, targetID)
+	if wait {
+		select {
+		case gate <- struct{}{}:
+			return func() { <-gate }, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	select {
+	case gate <- struct{}{}:
+		return func() { <-gate }, nil
+	default:
+		return nil, ErrMaintenanceRunning
+	}
 }
 
 func truncateOutput(value string) (string, bool) {
@@ -146,3 +164,5 @@ df -h /
 echo
 echo "== Docker after =="
 docker system df -v || true`
+
+const dockerImagePruneCommand = "docker image prune -a -f"

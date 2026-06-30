@@ -42,9 +42,9 @@ func main() {
 	defer sshMgr.Close()
 
 	inv := inventory.NewService(cfg, sshMgr, 3*time.Second)
-	deployer := deploy.NewService(cfg, sshMgr)
 	controller := control.NewService(cfg, sshMgr)
 	dockerMaint := dockermaint.NewService(cfg, sshMgr)
+	deployer := deploy.NewService(cfg, sshMgr, dockerMaint)
 	logSvc := logs.NewService(cfg, sshMgr)
 	restartSvc, err := restart.NewService(cfg, sshMgr)
 	if err != nil {
