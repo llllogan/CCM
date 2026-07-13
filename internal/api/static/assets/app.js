@@ -111,7 +111,6 @@ function clearDiskUsage() {
   const panel = $('diskUsage');
   if (!panel) return;
   panel.hidden = true;
-  $('diskUsagePath').textContent = '';
   $('diskUsagePercent').textContent = '--%';
   $('diskUsagePercent').classList.remove('is-warning', 'is-critical');
   $('diskUsageBar').style.width = '0%';
@@ -129,10 +128,7 @@ function renderDiskUsage(usage) {
 
   const percent = Math.max(0, Math.min(100, Number(usage.usage_percent) || 0));
   const level = percent >= 90 ? 'is-critical' : (percent >= 75 ? 'is-warning' : '');
-  const path = usage.path || usage.mountpoint || '-';
-  const filesystem = usage.filesystem ? ` · ${usage.filesystem}` : '';
   panel.hidden = false;
-  $('diskUsagePath').textContent = `df -h ${path}${filesystem}`;
   $('diskUsagePercent').textContent = `${percent}% used`;
   $('diskUsagePercent').classList.remove('is-warning', 'is-critical');
   if (level) $('diskUsagePercent').classList.add(level);
@@ -159,7 +155,6 @@ async function fetchDiskUsage(targetID, stackID, { silent = false } = {}) {
     if (selected?.type === 'compose' && selected.id === stackID && selected.target_id === targetID) {
       const panel = $('diskUsage');
       panel.hidden = false;
-      $('diskUsagePath').textContent = 'Unavailable';
       $('diskUsagePercent').textContent = '--%';
       $('diskUsagePercent').classList.remove('is-warning', 'is-critical');
       $('diskUsageBar').style.width = '0%';

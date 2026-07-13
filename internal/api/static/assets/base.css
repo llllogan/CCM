@@ -251,7 +251,6 @@ body {
   letter-spacing: 0.4px;
 }
 
-.disk-usage-path,
 .disk-usage-meta {
   margin-top: 4px;
   color: var(--muted);

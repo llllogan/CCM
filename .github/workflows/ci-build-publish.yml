@@ -13,8 +13,8 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7.0.0
+      - uses: actions/setup-go@v6.5.0
         with:
           go-version: "1.23.x"
       - run: go mod tidy
@@ -28,7 +28,7 @@ jobs:
     env:
       IMAGE_REPO: ghcr.io/llllogan/ccm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.0
 
       - name: Compute image coordinates
         id: vars
@@ -37,7 +37,7 @@ jobs:
           echo "sha_short=${sha_short}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
