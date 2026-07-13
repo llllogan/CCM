@@ -20,6 +20,7 @@ type Target struct {
 	Port       int                `yaml:"port" json:"port"`
 	User       string             `yaml:"user" json:"user"`
 	DeployRoot string             `yaml:"deploy_root" json:"deploy_root"`
+	DiskPath   string             `yaml:"disk_path" json:"disk_path"`
 	Defaults   DeployFlags        `yaml:"defaults" json:"defaults"`
 	Profiles   map[string]Profile `yaml:"profiles" json:"profiles,omitempty"`
 }
@@ -145,6 +146,18 @@ type TargetInventory struct {
 	Projects   []ComposeProject `json:"projects"`
 	At         time.Time        `json:"at"`
 	Err        string           `json:"err,omitempty"`
+}
+
+type DiskUsage struct {
+	TargetID     string    `json:"target_id"`
+	Path         string    `json:"path"`
+	Filesystem   string    `json:"filesystem"`
+	Size         string    `json:"size"`
+	Used         string    `json:"used"`
+	Available    string    `json:"available"`
+	UsagePercent int       `json:"usage_percent"`
+	Mountpoint   string    `json:"mountpoint"`
+	At           time.Time `json:"at"`
 }
 
 type DeployRequest struct {

@@ -30,6 +30,20 @@
         <main class="main panel-frame bloomi-main">
           <section class="stats" id="stats"></section>
 
+          <section id="diskUsage" class="disk-usage" hidden>
+            <div class="disk-usage-head">
+              <div>
+                <div class="disk-usage-title">Host disk usage</div>
+                <div id="diskUsagePath" class="disk-usage-path"></div>
+              </div>
+              <strong id="diskUsagePercent" class="disk-usage-percent">--%</strong>
+            </div>
+            <div class="disk-usage-track" role="progressbar" aria-label="Host disk usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="diskUsageBar" class="disk-usage-bar"></div>
+            </div>
+            <div id="diskUsageMeta" class="disk-usage-meta"></div>
+          </section>
+
           <section class="actions bloomi-actions">
             <button id="btnStart">Start</button>
             <button id="btnStop">Stop</button>

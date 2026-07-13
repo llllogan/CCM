@@ -72,6 +72,7 @@ Minimal points to verify:
 - `targets` contains every Docker host CCM should manage.
 - SSH `user` can run Docker commands on each target.
 - `deploy_root` + stack `deploy_subdir` resolves to the real compose folder.
+- Set `targets.<id>.disk_path` to the filesystem, mount path, or device to use for host disk usage (for example `/`, `/mnt/media`, or `/dev/sda1`). It defaults to `/`.
 - Keep `pull: true` for stack `ccm` if you want self-updates with `:latest`.
 - For special self-redeploy behavior, stack id must be exactly `ccm`.
 
@@ -180,6 +181,7 @@ What you can do in UI:
 
 - Browse targets, compose projects, and containers.
 - Open container details.
+- Open a compose stack to see the configured host filesystem's current disk usage, including a progress bar and exact percentage.
 - Stream container logs.
 - Run container controls:
   - `start`
@@ -280,6 +282,7 @@ If your workflow uses only merged `env` (no `env_file`), the final `.env` is gen
 - `GET /v1/stacks`
 - `GET /v1/inventory`
 - `GET /v1/items/{id}/children`
+- `GET /v1/targets/{id}/disk`
 - `GET /v1/targets/{id}/docker/df`
 - `POST /v1/targets/{id}/docker/safe-prune`
 - `GET /v1/containers/{id}`
@@ -293,7 +296,7 @@ If your workflow uses only merged `env` (no `env_file`), the final `.env` is gen
 - `GET /v1/containers/{id}/logs/stream?tail=200`
 - `GET /v1/restarts/tracking`
 
-Docker maintenance endpoints are fixed-command operations. `GET /v1/targets/{id}/docker/df` runs a read-only disk usage report. `POST /v1/targets/{id}/docker/safe-prune` prunes stopped containers older than 24 hours and unused images, build cache, and networks older than 7 days. It intentionally does not prune Docker volumes. If `auth_token` is configured, safe-prune requires `Authorization: Bearer <auth_token>`.
+`GET /v1/targets/{id}/disk` runs `df -P -h` against that target's configured `disk_path` and returns the parsed filesystem, size, used, available, mountpoint, and exact integer usage percentage. Docker maintenance endpoints are fixed-command operations. `GET /v1/targets/{id}/docker/df` runs a read-only disk usage report. `POST /v1/targets/{id}/docker/safe-prune` prunes stopped containers older than 24 hours and unused images, build cache, and networks older than 7 days. It intentionally does not prune Docker volumes. If `auth_token` is configured, safe-prune requires `Authorization: Bearer <auth_token>`.
 
 `POST /v1/deploy` request fields:
 

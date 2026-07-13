@@ -72,6 +72,9 @@ func (c *Config) Validate() error {
 		if t.Host == "" || t.User == "" || t.DeployRoot == "" {
 			errs = append(errs, fmt.Sprintf("target %q requires host/user/deploy_root", id))
 		}
+		if strings.TrimSpace(t.DiskPath) == "" {
+			t.DiskPath = "/"
+		}
 		if t.Port == 0 {
 			t.Port = 22
 		}

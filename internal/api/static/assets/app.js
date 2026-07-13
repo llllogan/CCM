@@ -25,6 +25,7 @@ function resetSelectionUI() {
   selected = null;
   stopLogs();
   setScheduledTabVisible(false);
+  clearDiskUsage();
   $('title').textContent = 'Select an item';
   $('subtitle').textContent = 'No host machine selected';
   $('status').textContent = 'idle';
@@ -106,6 +107,72 @@ async function fetchStacks({ silent = false } = {}) {
   }
 }
 
+function clearDiskUsage() {
+  const panel = $('diskUsage');
+  if (!panel) return;
+  panel.hidden = true;
+  $('diskUsagePath').textContent = '';
+  $('diskUsagePercent').textContent = '--%';
+  $('diskUsagePercent').classList.remove('is-warning', 'is-critical');
+  $('diskUsageBar').style.width = '0%';
+  $('diskUsageBar').classList.remove('is-warning', 'is-critical');
+  $('diskUsageMeta').textContent = '';
+}
+
+function renderDiskUsage(usage) {
+  const panel = $('diskUsage');
+  if (!panel) return;
+  if (!usage) {
+    clearDiskUsage();
+    return;
+  }
+
+  const percent = Math.max(0, Math.min(100, Number(usage.usage_percent) || 0));
+  const level = percent >= 90 ? 'is-critical' : (percent >= 75 ? 'is-warning' : '');
+  const path = usage.path || usage.mountpoint || '-';
+  const filesystem = usage.filesystem ? ` · ${usage.filesystem}` : '';
+  panel.hidden = false;
+  $('diskUsagePath').textContent = `df -h ${path}${filesystem}`;
+  $('diskUsagePercent').textContent = `${percent}% used`;
+  $('diskUsagePercent').classList.remove('is-warning', 'is-critical');
+  if (level) $('diskUsagePercent').classList.add(level);
+  const bar = $('diskUsageBar');
+  bar.style.width = `${percent}%`;
+  bar.classList.remove('is-warning', 'is-critical');
+  if (level) bar.classList.add(level);
+  const track = document.querySelector('.disk-usage-track');
+  if (track) track.setAttribute('aria-valuenow', String(percent));
+  $('diskUsageMeta').textContent = `${usage.used || '-'} used of ${usage.size || '-'} · ${usage.available || '-'} available · mounted on ${usage.mountpoint || '-'}`;
+}
+
+async function fetchDiskUsage(targetID, stackID, { silent = false } = {}) {
+  if (!targetID || !stackID) return false;
+  try {
+    const res = await fetch(`/v1/targets/${encodeURIComponent(targetID)}/disk`, { cache: 'no-store' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `disk usage request failed (${res.status})`);
+    if (selected?.type === 'compose' && selected.id === stackID && selected.target_id === targetID) {
+      renderDiskUsage(body);
+    }
+    return true;
+  } catch (err) {
+    if (selected?.type === 'compose' && selected.id === stackID && selected.target_id === targetID) {
+      const panel = $('diskUsage');
+      panel.hidden = false;
+      $('diskUsagePath').textContent = 'Unavailable';
+      $('diskUsagePercent').textContent = '--%';
+      $('diskUsagePercent').classList.remove('is-warning', 'is-critical');
+      $('diskUsageBar').style.width = '0%';
+      $('diskUsageBar').classList.remove('is-warning', 'is-critical');
+      $('diskUsageMeta').textContent = err?.message || String(err);
+    }
+    if (!silent) {
+      setActionResult(`Disk usage refresh failed: ${err?.message || String(err)}`, true);
+    }
+    return false;
+  }
+}
+
 function renderItems() {
   const q = $('search').value.toLowerCase();
   const host = $('items');
@@ -160,6 +227,7 @@ function renderItems() {
 
 async function selectItem(item) {
   selected = item;
+  clearDiskUsage();
   renderItems();
 
   $('title').textContent = item.name;
@@ -209,6 +277,7 @@ async function selectItem(item) {
       ['Status', item.status],
       ['Stack ID', item.id],
     ], { restart: stackRow?.restart || null });
+    await fetchDiskUsage(item.target_id, item.id);
     $('details').textContent = JSON.stringify(children, null, 2);
     await fetchScheduledTasks(item.id, { silent: true });
     renderScheduledTasks(item.id);
@@ -602,6 +671,7 @@ async function refreshSelectedDetails() {
       ['Status', selected.status],
       ['Stack ID', selected.id],
     ], { restart: stackRow?.restart || null });
+    await fetchDiskUsage(selected.target_id, selected.id, { silent: true });
     $('details').textContent = JSON.stringify(children, null, 2);
     renderScheduledTasks(selected.id);
   }
@@ -945,6 +1015,7 @@ document.addEventListener('visibilitychange', () => {
   setInterval(() => {
     if (selected?.type === 'compose') {
       fetchScheduledTasks(selected.id, { silent: true });
+      fetchDiskUsage(selected.target_id, selected.id, { silent: true });
     }
   }, 15000);
 })();

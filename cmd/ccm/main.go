@@ -15,6 +15,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/config"
 	"github.com/loganjanssen/ccm/internal/control"
 	"github.com/loganjanssen/ccm/internal/deploy"
+	"github.com/loganjanssen/ccm/internal/disk"
 	"github.com/loganjanssen/ccm/internal/dockermaint"
 	"github.com/loganjanssen/ccm/internal/inventory"
 	"github.com/loganjanssen/ccm/internal/logs"
@@ -44,6 +45,7 @@ func main() {
 	inv := inventory.NewService(cfg, sshMgr, 3*time.Second)
 	controller := control.NewService(cfg, sshMgr)
 	dockerMaint := dockermaint.NewService(cfg, sshMgr)
+	diskSvc := disk.NewService(cfg, sshMgr)
 	deployer := deploy.NewService(cfg, sshMgr, dockerMaint)
 	logSvc := logs.NewService(cfg, sshMgr)
 	restartSvc, err := restart.NewService(cfg, sshMgr)
@@ -65,7 +67,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         *listen,
-		Handler:      api.NewRouter(cfg, inv, deployer, controller, dockerMaint, logSvc, restartSvc, scriptSvc),
+		Handler:      api.NewRouter(cfg, inv, deployer, controller, dockerMaint, diskSvc, logSvc, restartSvc, scriptSvc),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,

@@ -18,6 +18,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/config"
 	"github.com/loganjanssen/ccm/internal/control"
 	"github.com/loganjanssen/ccm/internal/deploy"
+	"github.com/loganjanssen/ccm/internal/disk"
 	"github.com/loganjanssen/ccm/internal/dockermaint"
 	"github.com/loganjanssen/ccm/internal/inventory"
 	"github.com/loganjanssen/ccm/internal/logs"
@@ -39,6 +40,7 @@ type Router struct {
 	deploy  *deploy.Service
 	control *control.Service
 	docker  *dockermaint.Service
+	disk    *disk.Service
 	logs    *logs.Service
 	restart *restart.Service
 	scripts *script.Service
@@ -49,7 +51,7 @@ type Router struct {
 	themes  map[string]struct{}
 }
 
-func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, dm *dockermaint.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
+func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, dm *dockermaint.Service, ds *disk.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
 	root, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		panic("static root missing")
@@ -84,6 +86,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		deploy:  d,
 		control: c,
 		docker:  dm,
+		disk:    ds,
 		logs:    l,
 		restart: rs,
 		scripts: ss,
@@ -248,6 +251,24 @@ func (r *Router) itemChildren(w http.ResponseWriter, req *http.Request) {
 func (r *Router) targetRoute(w http.ResponseWriter, req *http.Request) {
 	path := strings.TrimPrefix(req.URL.Path, "/v1/targets/")
 	parts := strings.Split(path, "/")
+	if len(parts) == 2 && parts[1] == "disk" && req.Method == http.MethodGet {
+		targetID, err := url.PathUnescape(parts[0])
+		if err != nil || strings.TrimSpace(targetID) == "" {
+			util.WriteErr(w, 400, "invalid target id")
+			return
+		}
+		if r.disk == nil {
+			util.WriteErr(w, 404, "disk monitoring not configured")
+			return
+		}
+		out, err := r.disk.Usage(req.Context(), targetID)
+		if err != nil {
+			util.WriteErr(w, 400, err.Error())
+			return
+		}
+		util.WriteJSON(w, 200, out)
+		return
+	}
 	if len(parts) != 3 || parts[1] != "docker" {
 		util.WriteErr(w, 404, "not found")
 		return

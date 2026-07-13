@@ -28,6 +28,8 @@ targets:
     port: 22
     user: logan
     deploy_root: /home/logan
+    # Filesystem, mount path, or device passed to `df -h` for stack disk usage.
+    disk_path: /
     defaults:
       pull: true
       remove_orphans: true

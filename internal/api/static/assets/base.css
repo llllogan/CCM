@@ -229,6 +229,76 @@ body {
   color: var(--muted);
 }
 
+.disk-usage {
+  background: var(--stat-bg);
+  border: 2px solid;
+  border-color: var(--line-light) var(--line-deep) var(--line-deep) var(--line-light);
+  padding: 9px 10px 10px;
+}
+
+.disk-usage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.disk-usage-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.4px;
+}
+
+.disk-usage-path,
+.disk-usage-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.disk-usage-percent {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--title-dot-active);
+  white-space: nowrap;
+}
+
+.disk-usage-percent.is-warning {
+  color: var(--title-dot-connecting);
+}
+
+.disk-usage-percent.is-critical {
+  color: var(--action-err);
+}
+
+.disk-usage-track {
+  height: 18px;
+  margin-top: 9px;
+  padding: 2px;
+  border: 2px solid;
+  border-color: var(--line-deep) var(--line-light) var(--line-light) var(--line-deep);
+  background: var(--logs-bg);
+}
+
+.disk-usage-bar {
+  height: 100%;
+  width: 0;
+  min-width: 0;
+  background: var(--title-dot-active);
+  transition: width 180ms ease, background-color 180ms ease;
+}
+
+.disk-usage-bar.is-warning {
+  background: var(--title-dot-connecting);
+}
+
+.disk-usage-bar.is-critical {
+  background: var(--action-err);
+}
+
 .actions,
 .tabs,
 .log-controls {
