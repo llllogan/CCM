@@ -154,8 +154,6 @@ notification_service_key: "same-value-as-notify-api_key"
 
 The notification contains the stack, target, deploy path, repository, commit SHA, compose status, environment count, and script count. A notification failure is reported in the deploy response but does not roll back or mark the deployment failed.
 
-The service lives in the separate [Notification-Service repository](https://github.com/llllogan/Notification-Service). Add its Compose file as a CCM stack and mount a real `config.yml` next to it; keep Sendblue credentials in the stack environment. Build and push its `Dockerfile` to the image named by its Compose file before deploying through CCM.
-
 ### Host Script Schedules (scheduled host commands)
 
 CCM can also run host-side shell scripts on a cron schedule per stack.
