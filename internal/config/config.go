@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,14 +17,16 @@ import (
 )
 
 type Config struct {
-	Listen              string                           `yaml:"listen"`
-	AuthToken           string                           `yaml:"auth_token"`
-	Targets             map[string]*model.Target         `yaml:"targets"`
-	Stacks              map[string]*model.CCMStack       `yaml:"stacks"`
-	RestartStrategies   map[string]model.RestartStrategy `yaml:"restart_strategies"`
-	RestartStateFile    string                           `yaml:"restart_state_file"`
-	InventoryTTLSeconds int                              `yaml:"inventory_ttl_seconds"`
-	Notifications       model.NotificationConfig         `yaml:"notifications"`
+	Listen                 string                           `yaml:"listen"`
+	AuthToken              string                           `yaml:"auth_token"`
+	Targets                map[string]*model.Target         `yaml:"targets"`
+	Stacks                 map[string]*model.CCMStack       `yaml:"stacks"`
+	RestartStrategies      map[string]model.RestartStrategy `yaml:"restart_strategies"`
+	RestartStateFile       string                           `yaml:"restart_state_file"`
+	InventoryTTLSeconds    int                              `yaml:"inventory_ttl_seconds"`
+	Notifications          model.NotificationConfig         `yaml:"notifications"`
+	NotificationServiceURL string                           `yaml:"notification_service_url"`
+	NotificationServiceKey string                           `yaml:"notification_service_key"`
 }
 
 var stackIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -59,8 +62,16 @@ func (c *Config) Validate() error {
 	if len(c.Stacks) == 0 {
 		return errors.New("stacks is required")
 	}
-
 	var errs []string
+	if raw := strings.TrimSpace(c.NotificationServiceURL); raw != "" {
+		if u, err := url.Parse(raw); err != nil || u.Scheme == "" || u.Host == "" {
+			errs = append(errs, "notification_service_url must be an absolute URL")
+		}
+		if strings.TrimSpace(c.NotificationServiceKey) == "" {
+			errs = append(errs, "notification_service_key is required when notification_service_url is configured")
+		}
+	}
+
 	for id, t := range c.Targets {
 		if t == nil {
 			errs = append(errs, fmt.Sprintf("target %q is nil", id))

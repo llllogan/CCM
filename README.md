@@ -143,6 +143,19 @@ notifications:
 
 When enabled, CCM posts to Clive's inbound webhook on unhealthy state transitions and after the configured cooldown if the issue is still active. If `include_logs_tail` is greater than zero, container alerts include a bounded recent log slice for Clive to summarize.
 
+### Deployment notifications
+
+CCM can optionally notify the standalone `notify_service` after every successful deployment request. Set the exact notify endpoint in `/etc/ccm/config.yml`; the path selects a configured user or group:
+
+```yaml
+notification_service_url: "http://notify:8081/notify/household"
+notification_service_key: "same-value-as-notify-api_key"
+```
+
+The notification contains the stack, target, deploy path, repository, commit SHA, compose status, environment count, and script count. A notification failure is reported in the deploy response but does not roll back or mark the deployment failed.
+
+The service lives in the separate [Notification-Service repository](https://github.com/llllogan/Notification-Service). Add its Compose file as a CCM stack and mount a real `config.yml` next to it; keep Sendblue credentials in the stack environment. Build and push its `Dockerfile` to the image named by its Compose file before deploying through CCM.
+
 ### Host Script Schedules (scheduled host commands)
 
 CCM can also run host-side shell scripts on a cron schedule per stack.

@@ -3,6 +3,10 @@ auth_token: "replace-with-long-random-token"
 inventory_ttl_seconds: 3
 restart_state_file: /tmp/ccm-restart-state.json
 
+# Optional exact notify-service endpoint:
+# notification_service_url: "http://notify:8081/notify/household"
+# notification_service_key: "same-value-as-notify-api_key"
+
 notifications:
   clive:
     enabled: false
@@ -130,3 +134,7 @@ stacks:
   navidrome:
     target: navidrome
     deploy_subdir: navidrome
+  # Optional notify service stack. The target host must contain notify_service/config.yml.
+  notify:
+    target: self
+    deploy_subdir: notify

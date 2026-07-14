@@ -18,11 +18,17 @@ import (
 )
 
 type Service struct {
-	cfg    *config.Config
-	ssh    remoteClient
-	pruner imagePruner
-	mu     sync.Mutex
-	lock   map[string]*sync.Mutex
+	cfg      *config.Config
+	ssh      remoteClient
+	pruner   imagePruner
+	mu       sync.Mutex
+	lock     map[string]*sync.Mutex
+	notifier DeploymentNotifier
+}
+
+// DeploymentNotifier receives a human-readable summary after a successful deployment.
+type DeploymentNotifier interface {
+	Notify(ctx context.Context, message string) error
 }
 
 type remoteClient interface {
@@ -39,6 +45,10 @@ var scriptFilePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+\.sh$`)
 
 func NewService(cfg *config.Config, ssh *sshx.Manager, pruner imagePruner) *Service {
 	return &Service{cfg: cfg, ssh: ssh, pruner: pruner, lock: map[string]*sync.Mutex{}}
+}
+
+func (s *Service) SetNotifier(notifier DeploymentNotifier) {
+	s.notifier = notifier
 }
 
 func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[string]any, error) {
@@ -99,7 +109,7 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 		cleanup = s.pruneImages(ctx, stack.TargetID)
 	}
 
-	return map[string]any{
+	out := map[string]any{
 		"stack":        req.CCMStack,
 		"target":       stack.TargetID,
 		"deploy_path":  deployPath,
@@ -111,7 +121,23 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 		"run_compose":  runCompose,
 		"steps":        results,
 		"image_prune":  cleanup,
-	}, nil
+	}
+	if s.notifier != nil {
+		message := fmt.Sprintf("CCM deployment completed: stack=%s target=%s path=%s repo=%s sha=%s compose=%t env_count=%d scripts=%d", req.CCMStack, stack.TargetID, deployPath, valueOrManual(req.Repo), valueOrManual(req.SHA), runCompose, envCount, scriptCount)
+		if err := s.notifier.Notify(ctx, message); err != nil {
+			out["notification"] = map[string]any{"status": "failed", "error": err.Error()}
+		} else {
+			out["notification"] = map[string]string{"status": "sent"}
+		}
+	}
+	return out, nil
+}
+
+func valueOrManual(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "manual"
+	}
+	return value
 }
 
 func (s *Service) pruneImages(ctx context.Context, targetID string) model.DeployCleanupResult {
@@ -173,6 +199,14 @@ func (s *Service) RedeployStack(ctx context.Context, stackID string) (map[string
 		"steps":       results,
 		"async":       async,
 		"log_path":    logPath,
+	}
+	if s.notifier != nil {
+		message := fmt.Sprintf("CCM redeploy completed: stack=%s target=%s path=%s mode=%s", stackID, stack.TargetID, deployPath, map[bool]string{true: "async", false: "synchronous"}[async])
+		if err := s.notifier.Notify(ctx, message); err != nil {
+			out["notification"] = map[string]any{"status": "failed", "error": err.Error()}
+		} else {
+			out["notification"] = map[string]string{"status": "sent"}
+		}
 	}
 	return out, nil
 }
