@@ -26,14 +26,15 @@ type Target struct {
 }
 
 type CCMStack struct {
-	ID           string        `yaml:"-" json:"id"`
-	TargetID     string        `yaml:"target" json:"target_id"`
-	DeploySubdir string        `yaml:"deploy_subdir" json:"deploy_subdir"`
-	Profile      string        `yaml:"profile" json:"profile,omitempty"`
-	Restart      StackRestart  `yaml:"restart" json:"restart,omitempty"`
-	Scripts      []StackScript `yaml:"scripts" json:"scripts,omitempty"`
-	Target       *Target       `yaml:"-" json:"-"`
-	Flags        DeployFlags   `yaml:"-" json:"flags"`
+	ID                     string        `yaml:"-" json:"id"`
+	TargetID               string        `yaml:"target" json:"target_id"`
+	DeploySubdir           string        `yaml:"deploy_subdir" json:"deploy_subdir"`
+	NotificationServiceURL string        `yaml:"notification_service_url,omitempty" json:"notification_service_url,omitempty"`
+	Profile                string        `yaml:"profile" json:"profile,omitempty"`
+	Restart                StackRestart  `yaml:"restart" json:"restart,omitempty"`
+	Scripts                []StackScript `yaml:"scripts" json:"scripts,omitempty"`
+	Target                 *Target       `yaml:"-" json:"-"`
+	Flags                  DeployFlags   `yaml:"-" json:"flags"`
 }
 
 type StackScript struct {

@@ -104,6 +104,11 @@ func (c *Config) Validate() error {
 		if s.DeploySubdir == "" || s.DeploySubdir == "." {
 			errs = append(errs, fmt.Sprintf("stack %q requires non-empty deploy_subdir", id))
 		}
+		if raw := strings.TrimSpace(s.NotificationServiceURL); raw != "" {
+			if u, err := url.Parse(raw); err != nil || u.Scheme == "" || u.Host == "" {
+				errs = append(errs, fmt.Sprintf("stack %q notification_service_url must be an absolute URL", id))
+			}
+		}
 		clean := filepath.Clean("/" + s.DeploySubdir)
 		if clean == "/" || clean == "/." || clean == "" {
 			errs = append(errs, fmt.Sprintf("stack %q deploy_subdir invalid", id))

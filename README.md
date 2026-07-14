@@ -154,6 +154,18 @@ notification_service_key: "same-value-as-notify-api_key"
 
 The notification contains the stack, target, deploy path, repository, commit SHA, compose status, environment count, and script count. A notification failure is reported in the deploy response but does not roll back or mark the deployment failed.
 
+To send a particular stack to a different notify endpoint, add an endpoint override under that stack. It uses the global `notification_service_key`; there is no per-stack key:
+
+```yaml
+stacks:
+  app:
+    target: app-host
+    deploy_subdir: app
+    notification_service_url: "http://notify:8081/notify/another-group"
+```
+
+Stacks without an override continue to use the global `notification_service_url`.
+
 ### Host Script Schedules (scheduled host commands)
 
 CCM can also run host-side shell scripts on a cron schedule per stack.

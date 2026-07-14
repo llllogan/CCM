@@ -122,9 +122,9 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 		"steps":        results,
 		"image_prune":  cleanup,
 	}
-	if s.notifier != nil {
+	if notifier := s.notifierForStack(stack); notifier != nil {
 		message := fmt.Sprintf("CCM deployment completed: stack=%s target=%s path=%s repo=%s sha=%s compose=%t env_count=%d scripts=%d", req.CCMStack, stack.TargetID, deployPath, valueOrManual(req.Repo), valueOrManual(req.SHA), runCompose, envCount, scriptCount)
-		if err := s.notifier.Notify(ctx, message); err != nil {
+		if err := notifier.Notify(ctx, message); err != nil {
 			out["notification"] = map[string]any{"status": "failed", "error": err.Error()}
 		} else {
 			out["notification"] = map[string]string{"status": "sent"}
@@ -138,6 +138,13 @@ func valueOrManual(value string) string {
 		return "manual"
 	}
 	return value
+}
+
+func (s *Service) notifierForStack(stack *model.CCMStack) DeploymentNotifier {
+	if endpoint := strings.TrimSpace(stack.NotificationServiceURL); endpoint != "" {
+		return NewHTTPNotifier(endpoint, s.cfg.NotificationServiceKey)
+	}
+	return s.notifier
 }
 
 func (s *Service) pruneImages(ctx context.Context, targetID string) model.DeployCleanupResult {
@@ -200,9 +207,9 @@ func (s *Service) RedeployStack(ctx context.Context, stackID string) (map[string
 		"async":       async,
 		"log_path":    logPath,
 	}
-	if s.notifier != nil {
+	if notifier := s.notifierForStack(stack); notifier != nil {
 		message := fmt.Sprintf("CCM redeploy completed: stack=%s target=%s path=%s mode=%s", stackID, stack.TargetID, deployPath, map[bool]string{true: "async", false: "synchronous"}[async])
-		if err := s.notifier.Notify(ctx, message); err != nil {
+		if err := notifier.Notify(ctx, message); err != nil {
 			out["notification"] = map[string]any{"status": "failed", "error": err.Error()}
 		} else {
 			out["notification"] = map[string]string{"status": "sent"}

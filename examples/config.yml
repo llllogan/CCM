@@ -138,3 +138,5 @@ stacks:
   notify:
     target: self
     deploy_subdir: notify
+    # Optional per-stack override; uses notification_service_key above.
+    # notification_service_url: "http://notify:8081/notify/household"
