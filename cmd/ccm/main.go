@@ -47,9 +47,14 @@ func main() {
 	dockerMaint := dockermaint.NewService(cfg, sshMgr)
 	diskSvc := disk.NewService(cfg, sshMgr)
 	deployer := deploy.NewService(cfg, sshMgr, dockerMaint)
+	var httpNotifier *deploy.HTTPNotifier
 	if cfg.NotificationServiceURL != "" {
-		deployer.SetNotifier(deploy.NewHTTPNotifier(cfg.NotificationServiceURL, cfg.NotificationServiceKey))
+		httpNotifier = deploy.NewHTTPNotifier(cfg.NotificationServiceURL, cfg.NotificationServiceKey)
+		deployer.SetNotifier(httpNotifier)
 	}
+	diskMonitor := disk.NewMonitor(cfg, diskSvc, httpNotifier)
+	diskMonitor.Start(context.Background())
+	defer diskMonitor.Stop()
 	logSvc := logs.NewService(cfg, sshMgr)
 	restartSvc, err := restart.NewService(cfg, sshMgr)
 	if err != nil {

@@ -2,6 +2,7 @@ listen: ":8080"
 auth_token: "replace-with-long-random-token"
 inventory_ttl_seconds: 3
 restart_state_file: /tmp/ccm-restart-state.json
+disk_alert_state_file: /tmp/ccm-disk-alert-state.json
 
 # Optional exact notify-service endpoint:
 # notification_service_url: "http://notify:8081/notify/household"

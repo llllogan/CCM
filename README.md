@@ -166,6 +166,8 @@ stacks:
 
 Stacks without an override continue to use the global `notification_service_url`.
 
+When the global notification service URL and key are configured, CCM checks each target's configured `disk_path` every five minutes. It sends a disk alert when usage exceeds 80%, including the host, filesystem, path, percentage, and capacity details. Each target is alerted only once until usage returns to 80% or below, after which a new crossing triggers another alert. Alert state is stored in `disk_alert_state_file` (default `/tmp/ccm-disk-alert-state.json`) using atomic JSON writes; set this path on persistent storage if it must survive container recreation. Failed checks and notification requests are logged and retried on the next check.
+
 ### Host Script Schedules (scheduled host commands)
 
 CCM can also run host-side shell scripts on a cron schedule per stack.

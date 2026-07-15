@@ -23,6 +23,7 @@ type Config struct {
 	Stacks                 map[string]*model.CCMStack       `yaml:"stacks"`
 	RestartStrategies      map[string]model.RestartStrategy `yaml:"restart_strategies"`
 	RestartStateFile       string                           `yaml:"restart_state_file"`
+	DiskAlertStateFile     string                           `yaml:"disk_alert_state_file"`
 	InventoryTTLSeconds    int                              `yaml:"inventory_ttl_seconds"`
 	Notifications          model.NotificationConfig         `yaml:"notifications"`
 	NotificationServiceURL string                           `yaml:"notification_service_url"`
