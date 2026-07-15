@@ -321,7 +321,7 @@ If your workflow uses only merged `env` (no `env_file`), the final `.env` is gen
 - `GET /v1/containers/{id}/logs/stream?tail=200`
 - `GET /v1/restarts/tracking`
 
-`GET /v1/targets/{id}/disk` runs `df -P -h` against that target's configured `disk_path` and returns the parsed filesystem, size, used, available, mountpoint, and exact integer usage percentage. Docker maintenance endpoints are fixed-command operations. `GET /v1/targets/{id}/docker/df` runs a read-only disk usage report. `POST /v1/targets/{id}/docker/safe-prune` prunes stopped containers older than 24 hours and unused images, build cache, and networks older than 7 days. It intentionally does not prune Docker volumes. If `auth_token` is configured, safe-prune requires `Authorization: Bearer <auth_token>`.
+`GET /v1/targets/{id}/disk` runs `df -P -h` against that target's configured `disk_path` and returns the parsed filesystem, size, used, available, mountpoint, and exact integer usage percentage. `GET /v1/targets/{id}/ip` returns the configured target host address and the target host's public IPv4 address, discovered through `api.ipify.org` over SSH. Docker maintenance endpoints are fixed-command operations. `GET /v1/targets/{id}/docker/df` runs a read-only disk usage report. `POST /v1/targets/{id}/docker/safe-prune` prunes stopped containers older than 24 hours and unused images, build cache, and networks older than 7 days. It intentionally does not prune Docker volumes. If `auth_token` is configured, safe-prune requires `Authorization: Bearer <auth_token>`.
 
 `POST /v1/deploy` request fields:
 

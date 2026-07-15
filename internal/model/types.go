@@ -161,6 +161,12 @@ type DiskUsage struct {
 	At           time.Time `json:"at"`
 }
 
+type TargetIPInfo struct {
+	TargetID string `json:"target_id"`
+	HostIP   string `json:"host_ip"`
+	PublicIP string `json:"public_ip"`
+}
+
 type DeployRequest struct {
 	CCMStack   string            `json:"ccm_stack"`
 	Repo       string            `json:"repo"`

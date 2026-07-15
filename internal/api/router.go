@@ -23,6 +23,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/inventory"
 	"github.com/loganjanssen/ccm/internal/logs"
 	"github.com/loganjanssen/ccm/internal/model"
+	"github.com/loganjanssen/ccm/internal/network"
 	"github.com/loganjanssen/ccm/internal/restart"
 	"github.com/loganjanssen/ccm/internal/script"
 	ccmstatus "github.com/loganjanssen/ccm/internal/status"
@@ -41,6 +42,7 @@ type Router struct {
 	control *control.Service
 	docker  *dockermaint.Service
 	disk    *disk.Service
+	network *network.Service
 	logs    *logs.Service
 	restart *restart.Service
 	scripts *script.Service
@@ -51,7 +53,7 @@ type Router struct {
 	themes  map[string]struct{}
 }
 
-func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, dm *dockermaint.Service, ds *disk.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
+func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, dm *dockermaint.Service, ds *disk.Service, ns *network.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
 	root, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		panic("static root missing")
@@ -87,6 +89,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		control: c,
 		docker:  dm,
 		disk:    ds,
+		network: ns,
 		logs:    l,
 		restart: rs,
 		scripts: ss,
@@ -262,6 +265,24 @@ func (r *Router) targetRoute(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		out, err := r.disk.Usage(req.Context(), targetID)
+		if err != nil {
+			util.WriteErr(w, 400, err.Error())
+			return
+		}
+		util.WriteJSON(w, 200, out)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "ip" && req.Method == http.MethodGet {
+		targetID, err := url.PathUnescape(parts[0])
+		if err != nil || strings.TrimSpace(targetID) == "" {
+			util.WriteErr(w, 400, "invalid target id")
+			return
+		}
+		if r.network == nil {
+			util.WriteErr(w, 404, "network information not configured")
+			return
+		}
+		out, err := r.network.IPInfo(req.Context(), targetID)
 		if err != nil {
 			util.WriteErr(w, 400, err.Error())
 			return

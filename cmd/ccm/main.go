@@ -19,6 +19,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/dockermaint"
 	"github.com/loganjanssen/ccm/internal/inventory"
 	"github.com/loganjanssen/ccm/internal/logs"
+	"github.com/loganjanssen/ccm/internal/network"
 	"github.com/loganjanssen/ccm/internal/notify"
 	"github.com/loganjanssen/ccm/internal/restart"
 	"github.com/loganjanssen/ccm/internal/script"
@@ -46,6 +47,7 @@ func main() {
 	controller := control.NewService(cfg, sshMgr)
 	dockerMaint := dockermaint.NewService(cfg, sshMgr)
 	diskSvc := disk.NewService(cfg, sshMgr)
+	networkSvc := network.NewService(cfg, sshMgr)
 	deployer := deploy.NewService(cfg, sshMgr, dockerMaint)
 	var httpNotifier *deploy.HTTPNotifier
 	if cfg.NotificationServiceURL != "" {
@@ -75,7 +77,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         *listen,
-		Handler:      api.NewRouter(cfg, inv, deployer, controller, dockerMaint, diskSvc, logSvc, restartSvc, scriptSvc),
+		Handler:      api.NewRouter(cfg, inv, deployer, controller, dockerMaint, diskSvc, networkSvc, logSvc, restartSvc, scriptSvc),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,

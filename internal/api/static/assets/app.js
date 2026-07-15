@@ -168,6 +168,33 @@ async function fetchDiskUsage(targetID, stackID, { silent = false } = {}) {
   }
 }
 
+async function fetchTargetIP(targetID, stackID, { silent = false } = {}) {
+  if (!targetID || !stackID) return false;
+  try {
+    const res = await fetch(`/v1/targets/${encodeURIComponent(targetID)}/ip`, { cache: 'no-store' });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `IP address request failed (${res.status})`);
+    if (selected?.type === 'compose' && selected.id === stackID && selected.target_id === targetID) {
+      renderStackIP(body);
+    }
+    return true;
+  } catch (err) {
+    if (selected?.type === 'compose' && selected.id === stackID && selected.target_id === targetID) {
+      renderStackIP({ error: err?.message || String(err) });
+    }
+    if (!silent) {
+      setActionResult(`IP address refresh failed: ${err?.message || String(err)}`, true);
+    }
+    return false;
+  }
+}
+
+function renderStackIP(info) {
+  const value = info?.error ? info.error : `${info?.host_ip || '-'}, ${info?.public_ip || '-'}`;
+  const card = document.querySelector('[data-stat-key="IP Address"] .v');
+  if (card) card.textContent = value;
+}
+
 function renderItems() {
   const q = $('search').value.toLowerCase();
   const host = $('items');
@@ -266,13 +293,14 @@ async function selectItem(item) {
     const children = await ensureComposeChildren(item.id);
     const stackRow = stacksByID[item.id];
     renderStats([
-      ['Project', item.name],
+      ['IP Address', 'Loading...'],
       ['Services', children.length],
       ['Host machine', item.target_id],
       ['Status', item.status],
       ['Stack ID', item.id],
     ], { restart: stackRow?.restart || null });
     await fetchDiskUsage(item.target_id, item.id);
+    await fetchTargetIP(item.target_id, item.id);
     $('details').textContent = JSON.stringify(children, null, 2);
     await fetchScheduledTasks(item.id, { silent: true });
     renderScheduledTasks(item.id);
@@ -289,7 +317,8 @@ async function selectItem(item) {
 function renderStats(items, options = {}) {
   const cards = [];
   items.forEach(([k, v]) => {
-    cards.push(`<div class="stat"><div class="k">${escapeHTML(k)}</div><div class="v">${escapeHTML(String(v ?? '-'))}</div></div>`);
+    const keyAttr = k === 'IP Address' ? ' data-stat-key="IP Address"' : '';
+    cards.push(`<div class="stat"${keyAttr}><div class="k">${escapeHTML(k)}</div><div class="v">${escapeHTML(String(v ?? '-'))}</div></div>`);
   });
   if (options.restart) {
     cards.push(renderRestartCard(options.restart));
@@ -660,13 +689,14 @@ async function refreshSelectedDetails() {
     await fetchScheduledTasks(selected.id, { silent: true });
     const stackRow = stacksByID[selected.id];
     renderStats([
-      ['Project', selected.name],
+      ['IP Address', 'Loading...'],
       ['Services', children.length],
       ['Host machine', selected.target_id],
       ['Status', selected.status],
       ['Stack ID', selected.id],
     ], { restart: stackRow?.restart || null });
     await fetchDiskUsage(selected.target_id, selected.id, { silent: true });
+    await fetchTargetIP(selected.target_id, selected.id, { silent: true });
     $('details').textContent = JSON.stringify(children, null, 2);
     renderScheduledTasks(selected.id);
   }
