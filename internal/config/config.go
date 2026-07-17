@@ -32,6 +32,7 @@ type Config struct {
 
 var stackIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 var scriptFilePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+\.sh$`)
+var runnerUserPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
 func Load(path string) (*Config, error) {
 	b, err := os.ReadFile(path)
@@ -89,6 +90,15 @@ func (c *Config) Validate() error {
 		}
 		if t.Port == 0 {
 			t.Port = 22
+		}
+		if rc := t.GitHubRunners; rc != nil && rc.Enabled {
+			if !runnerUserPattern.MatchString(strings.TrimSpace(rc.User)) {
+				errs = append(errs, fmt.Sprintf("target %q github_runners.user must be a simple username", id))
+			}
+			home := strings.TrimSpace(rc.Home)
+			if home == "" || !filepath.IsAbs(home) || filepath.Clean(home) == "/" || containsTraversal(home) || strings.ContainsAny(home, "\t\n\r") {
+				errs = append(errs, fmt.Sprintf("target %q github_runners.home must be an absolute traversal-safe path", id))
+			}
 		}
 	}
 	for id, s := range c.Stacks {

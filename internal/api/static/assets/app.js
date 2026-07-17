@@ -8,6 +8,8 @@ const LOG_FLUSH_INTERVAL_MS = 100;
 let suppressNextStreamError = false;
 const composeChildrenByID = {};
 const expandedCompose = new Set();
+const runnerChildrenByID = {};
+const expandedRunnerHosts = new Set();
 const scheduledTasksByStackID = {};
 let actionLogName = '';
 let actionLogCountdownTimer = null;
@@ -47,6 +49,11 @@ function reconcileSelection() {
         status: byID.status,
       };
     }
+    return;
+  }
+  if (selected.type === 'runner') {
+    const cached = Object.values(runnerChildrenByID).flat().find((c) => c.id === selected.id);
+    if (cached) selected = { ...selected, name: cached.runner_name || cached.name, status: cached.status };
     return;
   }
   const byID = inventory.find((i) => i.id === selected.id && i.type === selected.type);
@@ -206,16 +213,14 @@ function renderItems() {
       const row = document.createElement('div');
       row.className = 'item';
       if (isSameSelection(selected, item)) row.classList.add('active');
-      const marker = item.type === 'compose' ? (expandedCompose.has(item.id) ? '[-] ' : '[+] ') : '';
+      const expandable = item.type === 'compose' || item.type === 'github_runner_host';
+      const expanded = item.type === 'compose' ? expandedCompose.has(item.id) : expandedRunnerHosts.has(item.id);
+      const marker = expandable ? (expanded ? '[-] ' : '[+] ') : '';
       row.innerHTML = `<div>${marker}${item.name}</div><div class="meta">${item.type} | ${item.target_id} | ${item.status}</div>`;
       row.onclick = async () => {
-        if (item.type === 'compose') {
-          if (expandedCompose.has(item.id)) {
-            expandedCompose.delete(item.id);
-          } else {
-            expandedCompose.add(item.id);
-            await ensureComposeChildren(item.id);
-          }
+        if (expandable) {
+          const set = item.type === 'compose' ? expandedCompose : expandedRunnerHosts;
+          if (set.has(item.id)) set.delete(item.id); else { set.add(item.id); if (item.type === 'compose') await ensureComposeChildren(item.id); else await ensureRunnerChildren(item.id); }
           await selectItem(item);
           renderItems();
           return;
@@ -241,6 +246,16 @@ function renderItems() {
               status: c.status,
             });
           };
+          host.appendChild(child);
+        });
+      }
+      if (item.type === 'github_runner_host' && expandedRunnerHosts.has(item.id)) {
+        const children = runnerChildrenByID[item.id] || [];
+        children.forEach((c) => {
+          const child = document.createElement('div'); child.className = 'item item-child';
+          if (isSameSelection(selected, { type: 'runner', id: c.id, name: c.name, target_id: c.target_id })) child.classList.add('active');
+          child.innerHTML = `<div>└─ ${escapeHTML(c.runner_name || c.name)}</div><div class="meta">${escapeHTML(c.status)} | ${escapeHTML(c.unit_name)}</div>`;
+          child.onclick = async (evt) => { evt.stopPropagation(); await selectItem({ type: 'runner', id: c.id, name: c.runner_name || c.name, target_id: c.target_id, status: c.status }); };
           host.appendChild(child);
         });
       }
@@ -305,6 +320,19 @@ async function selectItem(item) {
     await fetchScheduledTasks(item.id, { silent: true });
     renderScheduledTasks(item.id);
     stopLogs();
+    switchTab('details');
+  } else if (item.type === 'runner') {
+    setScheduledTabVisible(false); stopLogs();
+    const res = await fetch(`/v1/runners/${encodeURIComponent(item.id)}`);
+    if (!res.ok) { $('details').textContent = `Failed to load runner details (${res.status})`; return; }
+    const r = await res.json();
+    renderRunnerDetails(r);
+    switchTab('details');
+  } else if (item.type === 'github_runner_host') {
+    setScheduledTabVisible(false); stopLogs();
+    const children = await ensureRunnerChildren(item.id);
+    renderStats([['Runners', children.length], ['Host machine', item.target_id], ['Status', item.status]]);
+    $('details').textContent = JSON.stringify(children, null, 2);
     switchTab('details');
   } else {
     setScheduledTabVisible(false);
@@ -515,6 +543,24 @@ async function ensureComposeChildren(composeID) {
   return children;
 }
 
+async function ensureRunnerChildren(hostID) {
+  if (runnerChildrenByID[hostID]) return runnerChildrenByID[hostID];
+  const res = await fetch(`/v1/items/${encodeURIComponent(hostID)}/children`);
+  if (!res.ok) { runnerChildrenByID[hostID] = []; return []; }
+  const children = await res.json(); runnerChildrenByID[hostID] = children; return children;
+}
+
+function renderRunnerDetails(r) {
+  selected = { ...selected, name: r.runner_name || r.name, status: r.status };
+  $('title').textContent = r.runner_name || r.name; $('subtitle').textContent = r.target_id; $('status').textContent = r.status;
+  renderStats([
+    ['Service status', r.status], ['Enabled', r.enabled_state || '-'], ['PID', r.pid || '-'], ['Uptime', r.uptime || '-'],
+    ['Start time', fmtTime(r.start_time)], ['Unit', r.unit_name], ['Runner directory', r.runner_directory], ['Runner name', r.runner_name],
+    ['GitHub URL', r.github_url], ['Labels', (r.labels || []).join(', ') || '-'], ['Work folder', r.work_folder || '-'], ['Result', r.result || '-'],
+  ]);
+  $('details').textContent = JSON.stringify(r, null, 2);
+}
+
 function setScheduledTabVisible(visible) {
   const tab = $('tabScheduled');
   const panel = $('panelScheduled');
@@ -699,6 +745,11 @@ async function refreshSelectedDetails() {
     await fetchTargetIP(selected.target_id, selected.id, { silent: true });
     $('details').textContent = JSON.stringify(children, null, 2);
     renderScheduledTasks(selected.id);
+    return;
+  }
+  if (selected.type === 'runner') {
+    const res = await fetch(`/v1/runners/${encodeURIComponent(selected.id)}`);
+    if (res.ok) renderRunnerDetails(await res.json());
   }
 }
 
@@ -915,25 +966,25 @@ $('btnScheduledRefresh').onclick = async () => {
   setActionResult('Scheduled tasks refreshed.');
 };
 $('btnStart').onclick = async () => {
-  if (selected?.type !== 'container') {
-    setActionResult('Select a container first.', true);
+  if (selected?.type !== 'container' && selected?.type !== 'runner') {
+    setActionResult('Select a container or runner first.', true);
     return;
   }
-  await runAction('Start', () => post(`/v1/containers/${encodeURIComponent(selected.id)}/start`));
+  await runAction('Start', () => post(`/v1/${selected.type === 'runner' ? 'runners' : 'containers'}/${encodeURIComponent(selected.id)}/start`));
 };
 $('btnStop').onclick = async () => {
-  if (selected?.type !== 'container') {
-    setActionResult('Select a container first.', true);
+  if (selected?.type !== 'container' && selected?.type !== 'runner') {
+    setActionResult('Select a container or runner first.', true);
     return;
   }
-  await runAction('Stop', () => post(`/v1/containers/${encodeURIComponent(selected.id)}/stop`));
+  await runAction('Stop', () => post(`/v1/${selected.type === 'runner' ? 'runners' : 'containers'}/${encodeURIComponent(selected.id)}/stop`));
 };
 $('btnRestart').onclick = async () => {
-  if (selected?.type !== 'container') {
-    setActionResult('Select a container first.', true);
+  if (selected?.type !== 'container' && selected?.type !== 'runner') {
+    setActionResult('Select a container or runner first.', true);
     return;
   }
-  await runAction('Restart', () => post(`/v1/containers/${encodeURIComponent(selected.id)}/restart`), { showActionLogs: true });
+  await runAction('Restart', () => post(`/v1/${selected.type === 'runner' ? 'runners' : 'containers'}/${encodeURIComponent(selected.id)}/restart`), { showActionLogs: selected.type === 'container' });
 };
 $('btnRedeploy').onclick = async () => {
   if (selected?.type !== 'compose') {
