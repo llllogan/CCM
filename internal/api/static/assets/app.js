@@ -163,18 +163,18 @@ function renderDiskUsage(usage) {
   $('diskUsageMeta').textContent = `${usage.used || '-'} used of ${usage.size || '-'} · ${usage.available || '-'} available · mounted on ${usage.mountpoint || '-'}`;
 }
 
-async function fetchDiskUsage(targetID, stackID, { silent = false } = {}) {
-  if (!targetID || !stackID) return false;
+async function fetchDiskUsage(targetID, itemID, { silent = false, itemType = 'compose' } = {}) {
+  if (!targetID || !itemID) return false;
   try {
     const res = await fetch(`/v1/targets/${encodeURIComponent(targetID)}/disk`, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || `disk usage request failed (${res.status})`);
-    if (selected?.type === 'compose' && selected.id === stackID && selected.target_id === targetID) {
+    if (selected?.type === itemType && selected.id === itemID && selected.target_id === targetID) {
       renderDiskUsage(body);
     }
     return true;
   } catch (err) {
-    if (selected?.type === 'compose' && selected.id === stackID && selected.target_id === targetID) {
+    if (selected?.type === itemType && selected.id === itemID && selected.target_id === targetID) {
       const panel = $('diskUsage');
       panel.hidden = false;
       $('diskUsagePercent').textContent = '--%';
@@ -349,6 +349,7 @@ async function selectItem(item) {
     const children = await ensureRunnerChildren(item.id);
     renderStats([['Runners', children.length], ['Host machine', item.target_id], ['Status', item.status]]);
     $('details').textContent = JSON.stringify(children, null, 2);
+    await fetchDiskUsage(item.target_id, item.id, { itemType: 'github_runner_host' });
     switchTab('details');
   } else {
     setScheduledTabVisible(false);
@@ -582,7 +583,7 @@ function renderRunnerDetails(r) {
   $('title').textContent = r.runner_name || r.name; $('subtitle').textContent = r.target_id; $('status').textContent = r.status;
   renderStats([
     ['Service status', r.status], ['Enabled', r.enabled_state || '-'], ['PID', r.pid || '-'], ['Uptime', r.uptime || '-'],
-    ['Start time', fmtTime(r.start_time)], ['Unit', r.unit_name], ['Runner directory', r.runner_directory], ['Result', r.result || '-'],
+    ['Start time', fmtTime(r.start_time)], ['_work Usage', r.work_usage || '-'], ['Runner directory', r.runner_directory], ['Result', r.result || '-'],
   ]);
   $('details').textContent = JSON.stringify(r, null, 2);
 }
@@ -776,6 +777,13 @@ async function refreshSelectedDetails() {
   if (selected.type === 'runner') {
     const res = await fetch(`/v1/runners/${encodeURIComponent(selected.id)}`);
     if (res.ok) renderRunnerDetails(await res.json());
+    return;
+  }
+  if (selected.type === 'github_runner_host') {
+    const children = await ensureRunnerChildren(selected.id);
+    renderStats([['Runners', children.length], ['Host machine', selected.target_id], ['Status', selected.status]]);
+    $('details').textContent = JSON.stringify(children, null, 2);
+    await fetchDiskUsage(selected.target_id, selected.id, { silent: true, itemType: 'github_runner_host' });
   }
 }
 

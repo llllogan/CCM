@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -26,7 +27,28 @@ func NewService(cfg *config.Config, ssh *sshx.Manager, inv *inventory.Service) *
 }
 
 func (s *Service) Detail(ctx context.Context, id string) (model.Runner, bool) {
-	return s.inv.RunnerByID(ctx, id)
+	r, ok := s.inv.RunnerByID(ctx, id)
+	if !ok || strings.TrimSpace(r.RunnerDirectory) == "" {
+		return r, ok
+	}
+	t := s.cfg.Targets[r.TargetID]
+	if t == nil || t.GitHubRunners == nil || !t.GitHubRunners.Enabled {
+		return r, ok
+	}
+	workPath := strings.TrimRight(r.RunnerDirectory, "/") + "/_work"
+	home := filepath.Clean(t.GitHubRunners.Home)
+	cleanWork := filepath.Clean(workPath)
+	if cleanWork != home && !strings.HasPrefix(cleanWork, home+string(filepath.Separator)) {
+		return r, ok
+	}
+	res, err := s.ssh.RunCommand(ctx, r.TargetID, "du -sh -- "+shellQuote(cleanWork), 10*time.Second)
+	if err == nil && res.ExitCode == 0 {
+		fields := strings.Fields(res.Stdout)
+		if len(fields) > 0 {
+			r.WorkUsage = fields[0]
+		}
+	}
+	return r, ok
 }
 
 func (s *Service) Action(ctx context.Context, id, op string) (model.CommandResult, error) {

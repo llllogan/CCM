@@ -165,6 +165,7 @@ type Runner struct {
 	GitHubURL        string   `json:"github_url,omitempty"`
 	Labels           []string `json:"labels,omitempty"`
 	WorkFolder       string   `json:"work_folder,omitempty"`
+	WorkUsage        string   `json:"work_usage,omitempty"`
 }
 
 type InventoryRow struct {
