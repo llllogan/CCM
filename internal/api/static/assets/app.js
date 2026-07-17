@@ -43,6 +43,7 @@ function updateSelectionControls() {
   $('btnStop').disabled = !(isRunner || isContainer);
   $('btnRestart').disabled = !(isRunner || isContainer);
   $('btnRedeploy').disabled = !isCompose;
+  $('btnRedeploy').textContent = isRunner ? 'Uninstall' : 'Redeploy';
   const logsTab = document.querySelector('[data-tab="logs"]');
   if (logsTab) logsTab.hidden = isRunner || isRunnerHost;
   if ((isRunner || isRunnerHost) && document.querySelector('.tab.active')?.dataset.tab === 'logs') switchTab('details');
@@ -919,6 +920,11 @@ async function runAction(label, fn, { showActionLogs = false } = {}) {
     }
     setActionResult(`${label} complete${result && result.exit_code !== undefined ? ` (exit ${result.exit_code})` : ''}.`);
     await fetchInventory();
+    if (label === 'Uninstall' && selected?.type === 'runner') {
+      resetSelectionUI();
+      renderItems();
+      return;
+    }
     await refreshSelectedDetails();
     if (activeTab) switchTab(activeTab);
   } catch (err) {
@@ -1021,6 +1027,10 @@ $('btnRestart').onclick = async () => {
   await runAction('Restart', () => post(`/v1/${selected.type === 'runner' ? 'runners' : 'containers'}/${encodeURIComponent(selected.id)}/restart`), { showActionLogs: selected.type === 'container' });
 };
 $('btnRedeploy').onclick = async () => {
+  if (selected?.type === 'runner') {
+    await runAction('Uninstall', () => post(`/v1/runners/${encodeURIComponent(selected.id)}/uninstall`), { showActionLogs: true });
+    return;
+  }
   if (selected?.type !== 'compose') {
     setActionResult('Select a compose stack first.', true);
     return;

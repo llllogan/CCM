@@ -285,7 +285,7 @@ func (r *Router) runnerRoute(w http.ResponseWriter, req *http.Request) {
 		util.WriteJSON(w, 200, out)
 		return
 	}
-	if len(parts) == 2 && req.Method == http.MethodPost && (parts[1] == "start" || parts[1] == "stop" || parts[1] == "restart") {
+	if len(parts) == 2 && req.Method == http.MethodPost && (parts[1] == "start" || parts[1] == "stop" || parts[1] == "restart" || parts[1] == "uninstall") {
 		out, err := r.runners.Action(req.Context(), id, parts[1])
 		if err != nil {
 			util.WriteErr(w, 400, err.Error())

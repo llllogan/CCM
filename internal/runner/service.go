@@ -52,7 +52,7 @@ func (s *Service) Detail(ctx context.Context, id string) (model.Runner, bool) {
 }
 
 func (s *Service) Action(ctx context.Context, id, op string) (model.CommandResult, error) {
-	if op != "start" && op != "stop" && op != "restart" {
+	if op != "start" && op != "stop" && op != "restart" && op != "uninstall" {
 		return model.CommandResult{}, fmt.Errorf("invalid runner action")
 	}
 	r, ok := s.inv.RunnerByID(ctx, id)
@@ -68,6 +68,14 @@ func (s *Service) Action(ctx context.Context, id, op string) (model.CommandResul
 	}
 	// Unit names are discovered and validated, and are shell-quoted again at execution.
 	cmd := fmt.Sprintf("sudo systemctl %s %s", op, shellQuote(r.UnitName))
+	if op == "uninstall" {
+		runnerDir := filepath.Clean(strings.TrimSpace(r.RunnerDirectory))
+		home := filepath.Clean(t.GitHubRunners.Home)
+		if runnerDir == "." || (runnerDir != home && !strings.HasPrefix(runnerDir, home+string(filepath.Separator))) {
+			return model.CommandResult{}, fmt.Errorf("invalid runner directory")
+		}
+		cmd = fmt.Sprintf("cd %s && sudo ./svc.sh stop && sudo ./svc.sh uninstall", shellQuote(runnerDir))
+	}
 	res, err := s.ssh.RunCommand(ctx, r.TargetID, cmd, 30*time.Second)
 	if err != nil {
 		return res, err
