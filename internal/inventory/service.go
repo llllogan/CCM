@@ -2,10 +2,13 @@ package inventory
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +17,8 @@ import (
 	"github.com/loganjanssen/ccm/internal/model"
 	"github.com/loganjanssen/ccm/internal/sshx"
 )
+
+var runnerUnitPattern = regexp.MustCompile(`^actions\.runner\.[A-Za-z0-9_.-]+\.service$`)
 
 type Service struct {
 	cfg   *config.Config
@@ -70,6 +75,9 @@ func (s *Service) Global(ctx context.Context) ([]model.InventoryRow, []model.Con
 				Count:    len(p.Containers),
 			})
 		}
+		for _, h := range inv.RunnerHosts {
+			rows = append(rows, model.InventoryRow{Type: "github_runner_host", ID: h.ID, Name: h.Name, TargetID: h.TargetID, Status: h.Status, Count: len(h.Runners)})
+		}
 	}
 
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
@@ -85,6 +93,37 @@ func (s *Service) ProjectChildren(ctx context.Context, id string) []model.Contai
 		}
 	}
 	return nil
+}
+
+func (s *Service) RunnerChildren(ctx context.Context, id string) []model.Runner {
+	_, _, projects := s.Global(ctx)
+	_ = projects
+	for targetID := range s.cfg.Targets {
+		inv := s.targetInventory(ctx, targetID)
+		for _, h := range inv.RunnerHosts {
+			if h.ID == id {
+				if h.Runners == nil {
+					return []model.Runner{}
+				}
+				return h.Runners
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Service) RunnerByID(ctx context.Context, id string) (model.Runner, bool) {
+	for targetID := range s.cfg.Targets {
+		inv := s.targetInventory(ctx, targetID)
+		for _, h := range inv.RunnerHosts {
+			for _, runner := range h.Runners {
+				if runner.ID == id {
+					return runner, true
+				}
+			}
+		}
+	}
+	return model.Runner{}, false
 }
 
 func (s *Service) ContainerByID(ctx context.Context, id string) (model.Container, bool) {
@@ -106,28 +145,193 @@ func (s *Service) targetInventory(ctx context.Context, targetID string) model.Ta
 	}
 	s.mu.Unlock()
 
+	inv := model.TargetInventory{TargetID: targetID, At: time.Now()}
+	// Docker and runner discovery are independent: runner-only targets are valid.
 	cmd := "ids=$(docker ps -q); if [ -z \"$ids\" ]; then echo '[]'; else docker inspect $ids; fi"
 	res, err := s.ssh.RunCommand(ctx, targetID, cmd, 8*time.Second)
-	inv := model.TargetInventory{TargetID: targetID, At: time.Now()}
-	if err != nil {
-		inv.Err = err.Error()
-		s.putCache(targetID, inv)
-		return inv
-	}
-	if res.ExitCode != 0 {
+	if err == nil && res.ExitCode == 0 {
+		containers, projects, perr := s.parseInspect(targetID, res.Stdout)
+		if perr != nil {
+			if t := s.cfg.Targets[targetID]; t == nil || t.GitHubRunners == nil || !t.GitHubRunners.Enabled {
+				inv.Err = perr.Error()
+			}
+		} else {
+			inv.Containers, inv.Projects = containers, projects
+		}
+	} else if err != nil {
+		// Preserve Docker errors only for non-runner targets.
+		if t := s.cfg.Targets[targetID]; t == nil || t.GitHubRunners == nil || !t.GitHubRunners.Enabled {
+			inv.Err = err.Error()
+		}
+	} else if t := s.cfg.Targets[targetID]; t == nil || t.GitHubRunners == nil || !t.GitHubRunners.Enabled {
 		inv.Err = strings.TrimSpace(res.Stderr)
-		s.putCache(targetID, inv)
-		return inv
 	}
-	containers, projects, perr := s.parseInspect(targetID, res.Stdout)
-	if perr != nil {
-		inv.Err = perr.Error()
-	} else {
-		inv.Containers = containers
-		inv.Projects = projects
+	if t := s.cfg.Targets[targetID]; t != nil && t.GitHubRunners != nil && t.GitHubRunners.Enabled {
+		host, rerr := s.discoverRunners(ctx, targetID, t.GitHubRunners.Home)
+		if rerr != nil {
+			host.Status, host.Err = "error", rerr.Error()
+			inv.RunnerHosts = []model.RunnerHost{host}
+		} else {
+			inv.RunnerHosts = []model.RunnerHost{host}
+		}
 	}
 	s.putCache(targetID, inv)
 	return inv
+}
+
+func (s *Service) discoverRunners(ctx context.Context, targetID, home string) (model.RunnerHost, error) {
+	host := model.RunnerHost{ID: targetID + ":github-runners", TargetID: targetID, Name: targetID}
+	cmd := "command -v systemctl >/dev/null 2>&1 || { echo 'systemctl unavailable' >&2; exit 127; }; for d in " + shellQuote(home) + "/*; do [ -d \"$d\" ] || continue; printf 'CCM_RUNNER_DIR\\t%s\\n' \"$d\"; done; systemctl list-units --all --type=service --no-legend 'actions.runner.*.service' 2>/dev/null | while read -r unit rest; do [ -n \"$unit\" ] || continue; wd=$(systemctl show \"$unit\" --no-page --property=WorkingDirectory --value); printf 'CCM_RUNNER_UNIT\\t%s\\n' \"$unit\"; printf 'CCM_RUNNER_STATE\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$unit\" \"$(systemctl show \"$unit\" --no-page --property=ActiveState --value)\" \"$(systemctl show \"$unit\" --no-page --property=UnitFileState --value)\" \"$(systemctl show \"$unit\" --no-page --property=MainPID --value)\" \"$(systemctl show \"$unit\" --no-page --property=ExecMainStartTimestamp --value)\" \"$(systemctl show \"$unit\" --no-page --property=Result --value)\" \"$wd\"; if [ -f \"$wd/.runner\" ]; then printf 'CCM_RUNNER_META\\t%s\\t' \"$unit\"; base64 < \"$wd/.runner\" | tr -d '\\n'; printf '\\n'; fi; done"
+	res, err := s.ssh.RunCommand(ctx, targetID, cmd, 12*time.Second)
+	if err != nil {
+		return host, err
+	}
+	if res.ExitCode != 0 {
+		return host, fmt.Errorf("runner discovery failed: %s", strings.TrimSpace(res.Stderr))
+	}
+	runners, err := parseRunnerDiscovery(targetID, home, res.Stdout)
+	if err != nil {
+		return host, err
+	}
+	host.Runners = runners
+	host.Status = "running"
+	if len(runners) == 0 {
+		host.Status = "empty"
+	}
+	for _, r := range runners {
+		if r.Status != "active" {
+			host.Status = "degraded"
+			break
+		}
+	}
+	return host, nil
+}
+
+func parseRunnerDiscovery(targetID, home, raw string) ([]model.Runner, error) {
+	dirs := []string{}
+	runners := []model.Runner{}
+	var current *model.Runner
+	lines := strings.Split(raw, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "CCM_RUNNER_DIR\t") {
+			dirs = append(dirs, strings.TrimSpace(strings.TrimPrefix(line, "CCM_RUNNER_DIR\t")))
+			continue
+		}
+		if strings.HasPrefix(line, "CCM_RUNNER_UNIT\t") {
+			if current != nil {
+				runners = append(runners, *current)
+			}
+			unit := strings.TrimSpace(strings.TrimPrefix(line, "CCM_RUNNER_UNIT\t"))
+			if !runnerUnitPattern.MatchString(unit) {
+				current = nil
+				continue
+			}
+			current = &model.Runner{ID: targetID + ":runner:" + unit, TargetID: targetID, Name: unit, UnitName: unit, Status: "unknown"}
+			continue
+		}
+		if strings.HasPrefix(line, "CCM_RUNNER_META\t") {
+			if current != nil {
+				parts := strings.SplitN(line, "\t", 3)
+				if len(parts) == 3 && parts[1] == current.UnitName {
+					applyRunnerMetadata(current, parts[2])
+				}
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "CCM_RUNNER_STATE\t") {
+			if current == nil {
+				continue
+			}
+			fields := strings.SplitN(line, "\t", 8)
+			if len(fields) != 8 || fields[1] != current.UnitName {
+				continue
+			}
+			current.Status = strings.TrimSpace(fields[2])
+			current.EnabledState = strings.TrimSpace(fields[3])
+			current.PID = atoi(fields[4])
+			current.StartTime = strings.TrimSpace(fields[5])
+			current.Result = strings.TrimSpace(fields[6])
+			current.WorkingDirectory = strings.TrimSpace(fields[7])
+			current.RunnerDirectory = current.WorkingDirectory
+			if current.StartTime != "" {
+				current.Uptime = formatUptimeSystemd(current.StartTime)
+			}
+			continue
+		}
+		if current == nil || !strings.Contains(line, "\t") {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) < 6 {
+			continue
+		}
+		current.Status, current.EnabledState, current.PID, current.StartTime, current.Result, current.WorkingDirectory = fields[0], fields[1], atoi(fields[2]), strings.TrimSpace(fields[3]), fields[4], fields[5]
+		current.RunnerDirectory = strings.TrimSpace(fields[5])
+		if current.StartTime != "" {
+			current.Uptime = formatUptimeSystemd(current.StartTime)
+		}
+		// Metadata is intentionally read only from the safe .runner file; credentials are never requested.
+	}
+	if current != nil {
+		runners = append(runners, *current)
+	}
+	for i := range runners {
+		if runners[i].RunnerDirectory == "" {
+			for _, d := range dirs {
+				if strings.Contains(runners[i].UnitName, filepath.Base(d)) {
+					runners[i].RunnerDirectory = d
+					break
+				}
+			}
+		}
+	}
+	return runners, nil
+}
+
+type runnerMetadata struct {
+	Name      string `json:"name"`
+	AgentName string `json:"agentName"`
+	URL       string `json:"serverUrl"`
+	GitHubURL string `json:"gitHubUrl"`
+	Labels    []struct {
+		Name string `json:"name"`
+	} `json:"labels"`
+	Work string `json:"workFolder"`
+}
+
+func applyRunnerMetadata(r *model.Runner, encoded string) {
+	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
+	if err != nil {
+		return
+	}
+	var m runnerMetadata
+	if json.Unmarshal(b, &m) != nil {
+		return
+	}
+	r.RunnerName = m.Name
+	if r.RunnerName == "" {
+		r.RunnerName = m.AgentName
+	}
+	r.GitHubURL = m.URL
+	if r.GitHubURL == "" {
+		r.GitHubURL = m.GitHubURL
+	}
+	r.Labels = make([]string, 0, len(m.Labels))
+	for _, label := range m.Labels {
+		if strings.TrimSpace(label.Name) != "" {
+			r.Labels = append(r.Labels, label.Name)
+		}
+	}
+	r.WorkFolder = m.Work
+}
+
+func shellQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\\''") + "'" }
+func atoi(v string) int          { n, _ := strconv.Atoi(strings.TrimSpace(v)); return n }
+func formatUptimeSystemd(v string) string {
+	if t, err := time.Parse("Mon 2006-01-02 15:04:05 MST", strings.TrimSpace(v)); err == nil {
+		return formatUptime(t.UTC().Format(time.RFC3339))
+	}
+	return v
 }
 
 func (s *Service) putCache(targetID string, inv model.TargetInventory) {

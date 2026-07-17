@@ -374,3 +374,21 @@ Run CCM from source:
 go mod tidy
 go run ./cmd/ccm -config ./examples/config.yml -listen :8080
 ```
+# Self-hosted GitHub runners
+
+Targets may optionally expose GitHub Actions runners in the inventory:
+
+```yaml
+targets:
+  runner-vm:
+    host: 10.10.10.50
+    port: 22
+    user: logan
+    deploy_root: /home/logan
+    github_runners:
+      enabled: true
+      user: github-runner
+      home: /home/github-runner
+```
+
+CCM scans immediate directories under `home`, matching `actions.runner.*.service` systemd units, and reads only safe fields from each runner's `.runner` metadata. Credentials and token files are never read or returned. Runner actions use `sudo systemctl start|stop|restart <validated-unit>`. The runner Uninstall action runs `sudo ./svc.sh stop` followed by `sudo ./svc.sh uninstall` from the discovered runner directory; configure passwordless sudo accordingly. If discovery fails, the runner host remains visible with an error status. Check `systemctl`, the configured home path, service naming, and sudoers permissions when troubleshooting.

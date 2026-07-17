@@ -15,14 +15,21 @@ type Profile struct {
 }
 
 type Target struct {
-	ID         string             `yaml:"-" json:"id"`
-	Host       string             `yaml:"host" json:"host"`
-	Port       int                `yaml:"port" json:"port"`
-	User       string             `yaml:"user" json:"user"`
-	DeployRoot string             `yaml:"deploy_root" json:"deploy_root"`
-	DiskPath   string             `yaml:"disk_path" json:"disk_path"`
-	Defaults   DeployFlags        `yaml:"defaults" json:"defaults"`
-	Profiles   map[string]Profile `yaml:"profiles" json:"profiles,omitempty"`
+	ID            string              `yaml:"-" json:"id"`
+	Host          string              `yaml:"host" json:"host"`
+	Port          int                 `yaml:"port" json:"port"`
+	User          string              `yaml:"user" json:"user"`
+	DeployRoot    string              `yaml:"deploy_root" json:"deploy_root"`
+	DiskPath      string              `yaml:"disk_path" json:"disk_path"`
+	Defaults      DeployFlags         `yaml:"defaults" json:"defaults"`
+	Profiles      map[string]Profile  `yaml:"profiles" json:"profiles,omitempty"`
+	GitHubRunners *GitHubRunnerConfig `yaml:"github_runners" json:"github_runners,omitempty"`
+}
+
+type GitHubRunnerConfig struct {
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	User    string `yaml:"user" json:"user"`
+	Home    string `yaml:"home" json:"home"`
 }
 
 type CCMStack struct {
@@ -132,6 +139,35 @@ type ComposeProject struct {
 	Containers  []Container `json:"containers"`
 }
 
+type RunnerHost struct {
+	ID       string   `json:"id"`
+	TargetID string   `json:"target_id"`
+	Name     string   `json:"name"`
+	Status   string   `json:"status"`
+	Runners  []Runner `json:"runners"`
+	Err      string   `json:"err,omitempty"`
+}
+
+type Runner struct {
+	ID               string   `json:"id"`
+	TargetID         string   `json:"target_id"`
+	Name             string   `json:"name"`
+	Status           string   `json:"status"`
+	EnabledState     string   `json:"enabled_state,omitempty"`
+	PID              int      `json:"pid,omitempty"`
+	StartTime        string   `json:"start_time,omitempty"`
+	Uptime           string   `json:"uptime,omitempty"`
+	UnitName         string   `json:"unit_name"`
+	Result           string   `json:"result,omitempty"`
+	WorkingDirectory string   `json:"working_directory,omitempty"`
+	RunnerDirectory  string   `json:"runner_directory"`
+	RunnerName       string   `json:"runner_name,omitempty"`
+	GitHubURL        string   `json:"github_url,omitempty"`
+	Labels           []string `json:"labels,omitempty"`
+	WorkFolder       string   `json:"work_folder,omitempty"`
+	WorkUsage        string   `json:"work_usage,omitempty"`
+}
+
 type InventoryRow struct {
 	Type     string `json:"type"`
 	ID       string `json:"id"`
@@ -142,11 +178,12 @@ type InventoryRow struct {
 }
 
 type TargetInventory struct {
-	TargetID   string           `json:"target_id"`
-	Containers []Container      `json:"containers"`
-	Projects   []ComposeProject `json:"projects"`
-	At         time.Time        `json:"at"`
-	Err        string           `json:"err,omitempty"`
+	TargetID    string           `json:"target_id"`
+	Containers  []Container      `json:"containers"`
+	Projects    []ComposeProject `json:"projects"`
+	RunnerHosts []RunnerHost     `json:"runner_hosts,omitempty"`
+	At          time.Time        `json:"at"`
+	Err         string           `json:"err,omitempty"`
 }
 
 type DiskUsage struct {

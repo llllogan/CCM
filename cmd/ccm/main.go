@@ -22,6 +22,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/network"
 	"github.com/loganjanssen/ccm/internal/notify"
 	"github.com/loganjanssen/ccm/internal/restart"
+	"github.com/loganjanssen/ccm/internal/runner"
 	"github.com/loganjanssen/ccm/internal/script"
 	"github.com/loganjanssen/ccm/internal/sshx"
 	ccmstatus "github.com/loganjanssen/ccm/internal/status"
@@ -45,6 +46,7 @@ func main() {
 
 	inv := inventory.NewService(cfg, sshMgr, 3*time.Second)
 	controller := control.NewService(cfg, sshMgr)
+	runnerSvc := runner.NewService(cfg, sshMgr, inv)
 	dockerMaint := dockermaint.NewService(cfg, sshMgr)
 	diskSvc := disk.NewService(cfg, sshMgr)
 	networkSvc := network.NewService(cfg, sshMgr)
@@ -77,7 +79,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         *listen,
-		Handler:      api.NewRouter(cfg, inv, deployer, controller, dockerMaint, diskSvc, networkSvc, logSvc, restartSvc, scriptSvc),
+		Handler:      api.NewRouter(cfg, inv, deployer, controller, runnerSvc, dockerMaint, diskSvc, networkSvc, logSvc, restartSvc, scriptSvc),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,

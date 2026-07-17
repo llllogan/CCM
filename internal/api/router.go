@@ -25,6 +25,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/model"
 	"github.com/loganjanssen/ccm/internal/network"
 	"github.com/loganjanssen/ccm/internal/restart"
+	"github.com/loganjanssen/ccm/internal/runner"
 	"github.com/loganjanssen/ccm/internal/script"
 	ccmstatus "github.com/loganjanssen/ccm/internal/status"
 	"github.com/loganjanssen/ccm/internal/util"
@@ -40,6 +41,7 @@ type Router struct {
 	inv     *inventory.Service
 	deploy  *deploy.Service
 	control *control.Service
+	runners *runner.Service
 	docker  *dockermaint.Service
 	disk    *disk.Service
 	network *network.Service
@@ -53,7 +55,7 @@ type Router struct {
 	themes  map[string]struct{}
 }
 
-func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, dm *dockermaint.Service, ds *disk.Service, ns *network.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
+func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, rr *runner.Service, dm *dockermaint.Service, ds *disk.Service, ns *network.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
 	root, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		panic("static root missing")
@@ -87,6 +89,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		inv:     inv,
 		deploy:  d,
 		control: c,
+		runners: rr,
 		docker:  dm,
 		disk:    ds,
 		network: ns,
@@ -108,6 +111,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 	mux.HandleFunc("/v1/items/", r.itemChildren)
 	mux.HandleFunc("/v1/targets/", r.targetRoute)
 	mux.HandleFunc("/v1/containers/", r.containerRoute)
+	mux.HandleFunc("/v1/runners/", r.runnerRoute)
 	mux.HandleFunc("/v1/compose/", r.composeRoute)
 	mux.HandleFunc("/v1/deploy", r.deployRoute)
 	mux.HandleFunc("/v1/restarts/tracking", r.restartTracking)
@@ -244,11 +248,53 @@ func (r *Router) itemChildren(w http.ResponseWriter, req *http.Request) {
 	}
 	id := strings.TrimSuffix(strings.TrimPrefix(req.URL.Path, "/v1/items/"), "/children")
 	cs := r.inv.ProjectChildren(req.Context(), id)
+	if cs != nil {
+		util.WriteJSON(w, 200, cs)
+		return
+	}
+	runners := r.inv.RunnerChildren(req.Context(), id)
+	if runners != nil {
+		util.WriteJSON(w, 200, runners)
+		return
+	}
 	if cs == nil {
 		util.WriteErr(w, 404, "item not found")
 		return
 	}
 	util.WriteJSON(w, 200, cs)
+}
+
+func (r *Router) runnerRoute(w http.ResponseWriter, req *http.Request) {
+	if r.runners == nil {
+		util.WriteErr(w, 404, "runner management not configured")
+		return
+	}
+	path := strings.TrimPrefix(req.URL.Path, "/v1/runners/")
+	parts := strings.Split(path, "/")
+	id, err := url.PathUnescape(parts[0])
+	if err != nil || strings.TrimSpace(id) == "" {
+		util.WriteErr(w, 400, "invalid runner id")
+		return
+	}
+	if len(parts) == 1 && req.Method == http.MethodGet {
+		out, ok := r.runners.Detail(req.Context(), id)
+		if !ok {
+			util.WriteErr(w, 404, "runner not found")
+			return
+		}
+		util.WriteJSON(w, 200, out)
+		return
+	}
+	if len(parts) == 2 && req.Method == http.MethodPost && (parts[1] == "start" || parts[1] == "stop" || parts[1] == "restart" || parts[1] == "uninstall") {
+		out, err := r.runners.Action(req.Context(), id, parts[1])
+		if err != nil {
+			util.WriteErr(w, 400, err.Error())
+			return
+		}
+		util.WriteJSON(w, 200, out)
+		return
+	}
+	util.WriteErr(w, 404, "not found")
 }
 
 func (r *Router) targetRoute(w http.ResponseWriter, req *http.Request) {

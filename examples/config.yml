@@ -84,6 +84,15 @@ targets:
       pull: true
       remove_orphans: true
       recreate: "default"
+  runner-vm:
+    host: 10.10.10.50
+    port: 22
+    user: logan
+    deploy_root: /home/logan
+    github_runners:
+      enabled: true
+      user: github-runner
+      home: /home/github-runner
 
 stacks:
   ccm:
