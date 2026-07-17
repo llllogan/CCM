@@ -180,7 +180,7 @@ func (s *Service) targetInventory(ctx context.Context, targetID string) model.Ta
 }
 
 func (s *Service) discoverRunners(ctx context.Context, targetID, home string) (model.RunnerHost, error) {
-	host := model.RunnerHost{ID: targetID + ":github-runners", TargetID: targetID, Name: "GitHub Runners"}
+	host := model.RunnerHost{ID: targetID + ":github-runners", TargetID: targetID, Name: targetID}
 	cmd := "command -v systemctl >/dev/null 2>&1 || { echo 'systemctl unavailable' >&2; exit 127; }; for d in " + shellQuote(home) + "/*; do [ -d \"$d\" ] || continue; printf 'CCM_RUNNER_DIR\\t%s\\n' \"$d\"; done; systemctl list-units --all --type=service --no-legend 'actions.runner.*.service' 2>/dev/null | while read -r unit rest; do [ -n \"$unit\" ] || continue; wd=$(systemctl show \"$unit\" --no-page --property=WorkingDirectory --value); printf 'CCM_RUNNER_UNIT\\t%s\\n' \"$unit\"; printf 'CCM_RUNNER_STATE\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$unit\" \"$(systemctl show \"$unit\" --no-page --property=ActiveState --value)\" \"$(systemctl show \"$unit\" --no-page --property=UnitFileState --value)\" \"$(systemctl show \"$unit\" --no-page --property=MainPID --value)\" \"$(systemctl show \"$unit\" --no-page --property=ExecMainStartTimestamp --value)\" \"$(systemctl show \"$unit\" --no-page --property=Result --value)\" \"$wd\"; if [ -f \"$wd/.runner\" ]; then printf 'CCM_RUNNER_META\\t%s\\t' \"$unit\"; base64 < \"$wd/.runner\" | tr -d '\\n'; printf '\\n'; fi; done"
 	res, err := s.ssh.RunCommand(ctx, targetID, cmd, 12*time.Second)
 	if err != nil {

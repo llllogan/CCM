@@ -582,8 +582,7 @@ function renderRunnerDetails(r) {
   $('title').textContent = r.runner_name || r.name; $('subtitle').textContent = r.target_id; $('status').textContent = r.status;
   renderStats([
     ['Service status', r.status], ['Enabled', r.enabled_state || '-'], ['PID', r.pid || '-'], ['Uptime', r.uptime || '-'],
-    ['Start time', fmtTime(r.start_time)], ['Unit', r.unit_name], ['Runner directory', r.runner_directory], ['Runner name', r.runner_name],
-    ['GitHub URL', r.github_url], ['Labels', (r.labels || []).join(', ') || '-'], ['Work folder', r.work_folder || '-'], ['Result', r.result || '-'],
+    ['Start time', fmtTime(r.start_time)], ['Unit', r.unit_name], ['Runner directory', r.runner_directory], ['Result', r.result || '-'],
   ]);
   $('details').textContent = JSON.stringify(r, null, 2);
 }
