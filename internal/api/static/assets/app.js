@@ -31,6 +31,21 @@ function resetSelectionUI() {
   $('title').textContent = 'Select an item';
   $('subtitle').textContent = 'No host machine selected';
   $('status').textContent = 'idle';
+  updateSelectionControls();
+}
+
+function updateSelectionControls() {
+  const isRunner = selected?.type === 'runner';
+  const isRunnerHost = selected?.type === 'github_runner_host';
+  const isContainer = selected?.type === 'container';
+  const isCompose = selected?.type === 'compose';
+  $('btnStart').disabled = !(isRunner || isContainer);
+  $('btnStop').disabled = !(isRunner || isContainer);
+  $('btnRestart').disabled = !(isRunner || isContainer);
+  $('btnRedeploy').disabled = !isCompose;
+  const logsTab = document.querySelector('[data-tab="logs"]');
+  if (logsTab) logsTab.hidden = isRunner || isRunnerHost;
+  if ((isRunner || isRunnerHost) && document.querySelector('.tab.active')?.dataset.tab === 'logs') switchTab('details');
 }
 
 function reconcileSelection() {
@@ -254,7 +269,7 @@ function renderItems() {
         children.forEach((c) => {
           const child = document.createElement('div'); child.className = 'item item-child';
           if (isSameSelection(selected, { type: 'runner', id: c.id, name: c.name, target_id: c.target_id })) child.classList.add('active');
-          child.innerHTML = `<div>└─ ${escapeHTML(c.runner_name || c.name)}</div><div class="meta">${escapeHTML(c.status)} | ${escapeHTML(c.unit_name)}</div>`;
+          child.innerHTML = `<div>└─ ${escapeHTML(displayRunnerName(c))}</div>`;
           child.onclick = async (evt) => { evt.stopPropagation(); await selectItem({ type: 'runner', id: c.id, name: c.runner_name || c.name, target_id: c.target_id, status: c.status }); };
           host.appendChild(child);
         });
@@ -264,6 +279,7 @@ function renderItems() {
 
 async function selectItem(item) {
   selected = item;
+  updateSelectionControls();
   clearDiskUsage();
   renderItems();
 
@@ -377,6 +393,17 @@ function escapeHTML(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function shortRunnerUnit(unit) {
+  return String(unit || '')
+    .replace(/^actions\.runner\./, '')
+    .replace(/\.service$/, '');
+}
+
+function displayRunnerName(runner) {
+  const metadataName = String(runner?.runner_name || '').trim();
+  return metadataName && metadataName !== '-' ? metadataName : shortRunnerUnit(runner?.unit_name || runner?.name);
 }
 
 function setStreamIndicator(state) {

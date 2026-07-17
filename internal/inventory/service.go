@@ -181,7 +181,7 @@ func (s *Service) targetInventory(ctx context.Context, targetID string) model.Ta
 
 func (s *Service) discoverRunners(ctx context.Context, targetID, home string) (model.RunnerHost, error) {
 	host := model.RunnerHost{ID: targetID + ":github-runners", TargetID: targetID, Name: "GitHub Runners"}
-	cmd := "command -v systemctl >/dev/null 2>&1 || { echo 'systemctl unavailable' >&2; exit 127; }; for d in " + shellQuote(home) + "/*; do [ -d \"$d\" ] || continue; printf 'CCM_RUNNER_DIR\\t%s\\n' \"$d\"; done; systemctl list-units --all --type=service --no-legend 'actions.runner.*.service' 2>/dev/null | while read -r unit rest; do [ -n \"$unit\" ] || continue; printf 'CCM_RUNNER_UNIT\\t%s\\n' \"$unit\"; wd=$(systemctl show \"$unit\" --no-page --property=WorkingDirectory --value); systemctl show \"$unit\" --no-page --property=ActiveState,UnitFileState,MainPID,ExecMainStartTimestamp,Result,WorkingDirectory --value | tr '\\n' '\\t'; printf '\\n'; if [ -f \"$wd/.runner\" ]; then printf 'CCM_RUNNER_META\\t%s\\t' \"$unit\"; base64 < \"$wd/.runner\" | tr -d '\\n'; printf '\\n'; fi; done"
+	cmd := "command -v systemctl >/dev/null 2>&1 || { echo 'systemctl unavailable' >&2; exit 127; }; for d in " + shellQuote(home) + "/*; do [ -d \"$d\" ] || continue; printf 'CCM_RUNNER_DIR\\t%s\\n' \"$d\"; done; systemctl list-units --all --type=service --no-legend 'actions.runner.*.service' 2>/dev/null | while read -r unit rest; do [ -n \"$unit\" ] || continue; wd=$(systemctl show \"$unit\" --no-page --property=WorkingDirectory --value); printf 'CCM_RUNNER_UNIT\\t%s\\n' \"$unit\"; printf 'CCM_RUNNER_STATE\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \"$unit\" \"$(systemctl show \"$unit\" --no-page --property=ActiveState --value)\" \"$(systemctl show \"$unit\" --no-page --property=UnitFileState --value)\" \"$(systemctl show \"$unit\" --no-page --property=MainPID --value)\" \"$(systemctl show \"$unit\" --no-page --property=ExecMainStartTimestamp --value)\" \"$(systemctl show \"$unit\" --no-page --property=Result --value)\" \"$wd\"; if [ -f \"$wd/.runner\" ]; then printf 'CCM_RUNNER_META\\t%s\\t' \"$unit\"; base64 < \"$wd/.runner\" | tr -d '\\n'; printf '\\n'; fi; done"
 	res, err := s.ssh.RunCommand(ctx, targetID, cmd, 12*time.Second)
 	if err != nil {
 		return host, err
@@ -235,6 +235,26 @@ func parseRunnerDiscovery(targetID, home, raw string) ([]model.Runner, error) {
 				if len(parts) == 3 && parts[1] == current.UnitName {
 					applyRunnerMetadata(current, parts[2])
 				}
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "CCM_RUNNER_STATE\t") {
+			if current == nil {
+				continue
+			}
+			fields := strings.SplitN(line, "\t", 8)
+			if len(fields) != 8 || fields[1] != current.UnitName {
+				continue
+			}
+			current.Status = strings.TrimSpace(fields[2])
+			current.EnabledState = strings.TrimSpace(fields[3])
+			current.PID = atoi(fields[4])
+			current.StartTime = strings.TrimSpace(fields[5])
+			current.Result = strings.TrimSpace(fields[6])
+			current.WorkingDirectory = strings.TrimSpace(fields[7])
+			current.RunnerDirectory = current.WorkingDirectory
+			if current.StartTime != "" {
+				current.Uptime = formatUptimeSystemd(current.StartTime)
 			}
 			continue
 		}
