@@ -42,7 +42,7 @@ function updateSelectionControls() {
   $('btnStart').disabled = !(isRunner || isContainer);
   $('btnStop').disabled = !(isRunner || isContainer);
   $('btnRestart').disabled = !(isRunner || isContainer);
-  $('btnRedeploy').disabled = !isCompose;
+  $('btnRedeploy').disabled = !(isCompose || isRunner);
   $('btnRedeploy').textContent = isRunner ? 'Uninstall' : 'Redeploy';
   const logsTab = document.querySelector('[data-tab="logs"]');
   if (logsTab) logsTab.hidden = isRunner || isRunnerHost;
