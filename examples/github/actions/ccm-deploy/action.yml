@@ -133,19 +133,87 @@ runs:
         fi
 
         ccm_endpoint="${INPUT_CCM_URL%/}/v1/deploy"
-        status="$(
-          curl -sS -o ccm-deploy-response.json -w '%{http_code}' \
-            -X POST "${ccm_endpoint}" \
-            -H "Content-Type: application/json" \
-            "${auth_args[@]}" \
-            --data @ccm-deploy-payload.json
-        )"
-        if [ "${status}" -lt 200 ] || [ "${status}" -ge 300 ]; then
-          echo "deploy failed: HTTP ${status}"
-          cat ccm-deploy-response.json
+        stream_status_file="$(mktemp)"
+        stream_error_file="$(mktemp)"
+        trap 'rm -f "${stream_status_file}" "${stream_error_file}"' EXIT
+
+        echo "Streaming deployment output from CCM..."
+        set +e
+        curl -sS --no-buffer \
+          -X POST "${ccm_endpoint}" \
+          -H "Accept: text/event-stream" \
+          -H "Content-Type: application/json" \
+          "${auth_args[@]}" \
+          --data @ccm-deploy-payload.json \
+        | while IFS= read -r line; do
+            case "${line}" in
+              data:*)
+                data="${line#data:}"
+                data="${data# }"
+                type="$(printf '%s' "${data}" | jq -r '.type // empty' 2>/dev/null || true)"
+                case "${type}" in
+                  started)
+                    echo "[ccm] deployment started"
+                    ;;
+                  phase)
+                    phase="$(printf '%s' "${data}" | jq -r '.phase // "unknown"')"
+                    echo "[ccm] phase: ${phase}"
+                    ;;
+                  command)
+                    command="$(printf '%s' "${data}" | jq -r '.command // "unknown"')"
+                    echo "[ccm] running: ${command}"
+                    ;;
+                  output)
+                    stream="$(printf '%s' "${data}" | jq -r '.stream // "output"')"
+                    command="$(printf '%s' "${data}" | jq -r '.command // "command"')"
+                    line_text="$(printf '%s' "${data}" | jq -r '.line // ""')"
+                    echo "[${stream}] ${command}: ${line_text}"
+                    ;;
+                  command_finished)
+                    command="$(printf '%s' "${data}" | jq -r '.command // "command"')"
+                    exit_code="$(printf '%s' "${data}" | jq -r '.exit_code // "unknown"')"
+                    echo "[ccm] ${command} finished with exit ${exit_code}"
+                    ;;
+                  complete)
+                    result="$(printf '%s' "${data}" | jq -r '.status // "unknown"')"
+                    error="$(printf '%s' "${data}" | jq -r '.error // empty')"
+                    printf '%s' "${result}" > "${stream_status_file}"
+                    if [ -n "${error}" ]; then
+                      printf '%s' "${error}" > "${stream_error_file}"
+                    fi
+                    echo "[ccm] deployment ${result}"
+                    ;;
+                  *)
+                    echo "[ccm] ${data}"
+                    ;;
+                esac
+                ;;
+              event:*|'')
+                ;;
+              *)
+                echo "[ccm] ${line}"
+                ;;
+            esac
+          done
+        pipeline_statuses=("${PIPESTATUS[@]}")
+        set -e
+        curl_status="${pipeline_statuses[0]:-1}"
+        if [ "${curl_status}" -ne 0 ]; then
+          echo "deploy stream failed: curl exited ${curl_status}"
           exit 1
         fi
-        cat ccm-deploy-response.json
+        if [ ! -s "${stream_status_file}" ]; then
+          echo "deploy stream failed: no terminal complete event received"
+          exit 1
+        fi
+        stream_status="$(cat "${stream_status_file}")"
+        if [ "${stream_status}" != "succeeded" ]; then
+          echo "deploy failed: ${stream_status}"
+          if [ -s "${stream_error_file}" ]; then
+            cat "${stream_error_file}"
+          fi
+          exit 1
+        fi
 
         if [ "${INPUT_RESTART_AFTER_DEPLOY}" != "true" ]; then
           exit 0

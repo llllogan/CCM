@@ -88,6 +88,22 @@ func (m *Manager) RunCommand(ctx context.Context, targetID, cmd string, timeout 
 	return run(ctx, client, cmd, timeout)
 }
 
+// StreamCommand runs a remote command and delivers stdout/stderr lines as they
+// arrive. The returned CommandResult contains the complete buffered output and
+// the command exit code.
+func (m *Manager) StreamCommand(ctx context.Context, targetID, cmd string, timeout time.Duration, onLine func(stream, line string) error) (model.CommandResult, error) {
+	tc, err := m.target(targetID)
+	if err != nil {
+		return model.CommandResult{}, err
+	}
+	client, release, err := m.logClient(tc)
+	if err != nil {
+		return model.CommandResult{}, err
+	}
+	defer release()
+	return streamCommand(ctx, client, cmd, timeout, onLine)
+}
+
 func (m *Manager) WriteFile(ctx context.Context, targetID, remotePath string, content []byte, mode string, timeout time.Duration) error {
 	tc, err := m.target(targetID)
 	if err != nil {
@@ -353,6 +369,98 @@ func run(ctx context.Context, client *ssh.Client, cmd string, timeout time.Durat
 		_ = session.Close()
 		return model.CommandResult{}, ctx.Err()
 	}
+}
+
+func streamCommand(ctx context.Context, client *ssh.Client, cmd string, timeout time.Duration, onLine func(stream, line string) error) (model.CommandResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	session, err := client.NewSession()
+	if err != nil {
+		return model.CommandResult{}, err
+	}
+	defer session.Close()
+
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return model.CommandResult{}, err
+	}
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return model.CommandResult{}, err
+	}
+	if err := session.Start(cmd); err != nil {
+		return model.CommandResult{}, err
+	}
+
+	type streamEvent struct {
+		stream string
+		line   string
+		err    error
+		done   bool
+	}
+	evCh := make(chan streamEvent, 128)
+	var stdoutBuf, stderrBuf strings.Builder
+
+	read := func(name string, r io.Reader, out *strings.Builder) {
+		scanner := bufio.NewScanner(r)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			out.WriteString(line)
+			out.WriteByte('\n')
+			select {
+			case evCh <- streamEvent{stream: name, line: line}:
+			case <-ctx.Done():
+				evCh <- streamEvent{done: true}
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
+			evCh <- streamEvent{err: err, done: true}
+			return
+		}
+		evCh <- streamEvent{done: true}
+	}
+	go read("stdout", stdout, &stdoutBuf)
+	go read("stderr", stderr, &stderrBuf)
+
+	done := 0
+	for done < 2 {
+		select {
+		case <-ctx.Done():
+			_ = session.Signal(ssh.SIGKILL)
+			_ = session.Close()
+			return model.CommandResult{}, ctx.Err()
+		case ev := <-evCh:
+			if ev.line != "" && onLine != nil {
+				if err := onLine(ev.stream, ev.line); err != nil {
+					_ = session.Signal(ssh.SIGKILL)
+					_ = session.Close()
+					return model.CommandResult{}, err
+				}
+			}
+			if ev.err != nil {
+				_ = session.Signal(ssh.SIGKILL)
+				_ = session.Close()
+				return model.CommandResult{}, ev.err
+			}
+			if ev.done {
+				done++
+			}
+		}
+	}
+
+	res := model.CommandResult{Stdout: stdoutBuf.String(), Stderr: stderrBuf.String(), ExitCode: 0}
+	if err := session.Wait(); err != nil && !errors.Is(err, io.EOF) {
+		var ee *ssh.ExitError
+		if errors.As(err, &ee) {
+			res.ExitCode = ee.ExitStatus()
+			return res, nil
+		}
+		return res, err
+	}
+	return res, nil
 }
 
 func loadAuthMethods() ([]ssh.AuthMethod, error) {

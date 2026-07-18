@@ -6,7 +6,9 @@ Included files:
 
 - `actions/ccm-deploy/action.yml`: reusable composite action that:
   - builds CCM deploy payload from compose/caddy/env/scripts data
-  - calls `POST /v1/deploy`
+  - calls `POST /v1/deploy` with `Accept: text/event-stream`
+  - prints streamed deployment phases and Compose output to the GitHub Actions log
+  - fails the step when CCM reports a failed or incomplete deployment stream
   - optionally forces restart of all containers in the stack
 - `workflows/deploy-jellyfin.yml`: stack-specific workflow example
 - `workflows/redeploy-stack.yml`: manual redeploy workflow (`POST /v1/compose/{id}/redeploy`)

@@ -440,12 +440,47 @@ func (r *Router) deployRoute(w http.ResponseWriter, req *http.Request) {
 		util.WriteErr(w, 400, "invalid json")
 		return
 	}
+	if strings.Contains(req.Header.Get("Accept"), "text/event-stream") {
+		r.streamDeployRoute(w, req, body)
+		return
+	}
 	out, err := r.deploy.Deploy(req.Context(), body)
 	if err != nil {
 		util.WriteErr(w, 400, err.Error())
 		return
 	}
 	util.WriteJSON(w, 200, out)
+}
+
+func (r *Router) streamDeployRoute(w http.ResponseWriter, req *http.Request, body model.DeployRequest) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		util.WriteErr(w, 500, "stream unsupported")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	flusher.Flush()
+
+	emit := func(event deploy.StreamEvent) error {
+		payload, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, payload); err != nil {
+			return err
+		}
+		flusher.Flush()
+		return nil
+	}
+
+	_, err := r.deploy.DeployStream(req.Context(), body, emit)
+	if err != nil {
+		_ = emit(deploy.StreamEvent{Type: "complete", Status: "failed", Error: err.Error()})
+		return
+	}
+	_ = emit(deploy.StreamEvent{Type: "complete", Status: "succeeded", Phase: "complete"})
 }
 
 func (r *Router) restartTracking(w http.ResponseWriter, req *http.Request) {

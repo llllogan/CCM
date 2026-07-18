@@ -34,6 +34,30 @@ func (f *fakeRemoteClient) WriteFile(_ context.Context, _ string, remotePath str
 	return nil
 }
 
+func (f *fakeRemoteClient) StreamCommand(_ context.Context, _ string, cmd string, _ time.Duration, onLine func(string, string) error) (model.CommandResult, error) {
+	f.commands = append(f.commands, cmd)
+	result := model.CommandResult{}
+	if len(f.results) > 0 {
+		result = f.results[0]
+		f.results = f.results[1:]
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(result.Stdout, "\n"), "\n") {
+		if line != "" {
+			if err := onLine("stdout", line); err != nil {
+				return model.CommandResult{}, err
+			}
+		}
+	}
+	for _, line := range strings.Split(strings.TrimSuffix(result.Stderr, "\n"), "\n") {
+		if line != "" {
+			if err := onLine("stderr", line); err != nil {
+				return model.CommandResult{}, err
+			}
+		}
+	}
+	return result, nil
+}
+
 type fakeImagePruner struct {
 	targets []string
 	result  model.DockerMaintenanceResult
@@ -165,6 +189,58 @@ func TestDeployReportsImagePruneFailureWithoutFailingDeployment(t *testing.T) {
 	}
 	if cleanup.Status != "failed" || cleanup.Error != "prune failed" || cleanup.Result == nil || cleanup.Result.ExitCode != 1 {
 		t.Fatalf("image_prune = %#v, want reported failure", cleanup)
+	}
+}
+
+func TestDeployStreamEmitsOutputAndCompletion(t *testing.T) {
+	remote := &fakeRemoteClient{results: []model.CommandResult{{Stdout: "pulling\n"}, {Stdout: "started\n"}}}
+	service := newTestService(remote, &fakeImagePruner{}, "app")
+	service.cfg.Stacks["app"].Flags.Pull = true
+	var events []StreamEvent
+
+	_, err := service.DeployStream(context.Background(), model.DeployRequest{CCMStack: "app", ComposeYML: "services: {}"}, func(event StreamEvent) error {
+		events = append(events, event)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("DeployStream() error = %v", err)
+	}
+	if len(remote.commands) != 2 || !strings.Contains(remote.commands[0], "docker compose pull") || !strings.Contains(remote.commands[1], "docker compose up") {
+		t.Fatalf("commands = %#v, want pull followed by up", remote.commands)
+	}
+	var sawOutput, sawFinished bool
+	for _, event := range events {
+		if event.Type == "output" && event.Line == "pulling" && event.Stream == "stdout" {
+			sawOutput = true
+		}
+		if event.Type == "command_finished" && event.ExitCode != nil && *event.ExitCode == 0 {
+			sawFinished = true
+		}
+	}
+	if !sawOutput || !sawFinished {
+		t.Fatalf("events = %#v, want streamed output and command completion", events)
+	}
+}
+
+func TestDeployStreamStopsAfterPullFailure(t *testing.T) {
+	remote := &fakeRemoteClient{results: []model.CommandResult{{Stderr: "no space left on device", ExitCode: 1}}}
+	pruner := &fakeImagePruner{}
+	service := newTestService(remote, pruner, "app")
+	service.cfg.Stacks["app"].Flags.Pull = true
+	var events []StreamEvent
+
+	_, err := service.DeployStream(context.Background(), model.DeployRequest{CCMStack: "app", ComposeYML: "services: {}"}, func(event StreamEvent) error {
+		events = append(events, event)
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "docker compose pull failed") {
+		t.Fatalf("DeployStream() error = %v, want pull failure", err)
+	}
+	if len(remote.commands) != 1 {
+		t.Fatalf("commands = %#v, want pull only", remote.commands)
+	}
+	if len(pruner.targets) != 0 {
+		t.Fatalf("prune targets = %#v, want none", pruner.targets)
 	}
 }
 

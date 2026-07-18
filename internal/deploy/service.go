@@ -31,9 +31,24 @@ type DeploymentNotifier interface {
 	Notify(ctx context.Context, message string) error
 }
 
+type StreamEvent struct {
+	Type     string `json:"type"`
+	Phase    string `json:"phase,omitempty"`
+	Command  string `json:"command,omitempty"`
+	Stream   string `json:"stream,omitempty"`
+	Line     string `json:"line,omitempty"`
+	ExitCode *int   `json:"exit_code,omitempty"`
+	Status   string `json:"status,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
 type remoteClient interface {
 	RunCommand(ctx context.Context, targetID, cmd string, timeout time.Duration) (model.CommandResult, error)
 	WriteFile(ctx context.Context, targetID, remotePath string, content []byte, mode string, timeout time.Duration) error
+}
+
+type streamingRemoteClient interface {
+	StreamCommand(context.Context, string, string, time.Duration, func(string, string) error) (model.CommandResult, error)
 }
 
 type imagePruner interface {
@@ -52,6 +67,14 @@ func (s *Service) SetNotifier(notifier DeploymentNotifier) {
 }
 
 func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[string]any, error) {
+	return s.deploy(ctx, req, nil)
+}
+
+func (s *Service) DeployStream(ctx context.Context, req model.DeployRequest, emit func(StreamEvent) error) (map[string]any, error) {
+	return s.deploy(ctx, req, emit)
+}
+
+func (s *Service) deploy(ctx context.Context, req model.DeployRequest, emit func(StreamEvent) error) (map[string]any, error) {
 	stack, ok := s.cfg.Stacks[req.CCMStack]
 	if !ok {
 		return nil, fmt.Errorf("unknown ccm_stack %q", req.CCMStack)
@@ -64,7 +87,13 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 	defer unlock()
 
 	deployPath := path.Join(stack.Target.DeployRoot, stack.DeploySubdir)
+	if err := emitEvent(emit, StreamEvent{Type: "started", Phase: "validation"}); err != nil {
+		return nil, err
+	}
 
+	if err := emitEvent(emit, StreamEvent{Type: "phase", Phase: "write_compose"}); err != nil {
+		return nil, err
+	}
 	if err := s.ssh.WriteFile(ctx, stack.TargetID, path.Join(deployPath, "docker-compose.yml"), []byte(req.ComposeYML), "0644", 10*time.Second); err != nil {
 		return nil, fmt.Errorf("write docker-compose.yml: %w", err)
 	}
@@ -74,11 +103,17 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 		return nil, err
 	}
 	if strings.TrimSpace(envContent) != "" {
+		if err := emitEvent(emit, StreamEvent{Type: "phase", Phase: "write_env"}); err != nil {
+			return nil, err
+		}
 		if err := s.ssh.WriteFile(ctx, stack.TargetID, path.Join(deployPath, ".env"), []byte(envContent), "0600", 10*time.Second); err != nil {
 			return nil, fmt.Errorf("write .env: %w", err)
 		}
 	}
 	if strings.TrimSpace(req.Caddyfile) != "" {
+		if err := emitEvent(emit, StreamEvent{Type: "phase", Phase: "write_caddyfile"}); err != nil {
+			return nil, err
+		}
 		if err := s.ssh.WriteFile(ctx, stack.TargetID, path.Join(deployPath, "Caddyfile"), []byte(req.Caddyfile), "0644", 10*time.Second); err != nil {
 			return nil, fmt.Errorf("write Caddyfile: %w", err)
 		}
@@ -95,7 +130,11 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 	results := []model.CommandResult{}
 	if runCompose {
 		var err error
-		results, err = s.runComposeUp(ctx, stack, deployPath)
+		if emit == nil {
+			results, err = s.runComposeUp(ctx, stack, deployPath)
+		} else {
+			results, err = s.runComposeUpStream(ctx, stack, deployPath, emit)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -106,6 +145,9 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 		Reason: "compose execution disabled",
 	}
 	if runCompose {
+		if err := emitEvent(emit, StreamEvent{Type: "phase", Phase: "image_prune"}); err != nil {
+			return nil, err
+		}
 		cleanup = s.pruneImages(ctx, stack.TargetID)
 	}
 
@@ -131,6 +173,13 @@ func (s *Service) Deploy(ctx context.Context, req model.DeployRequest) (map[stri
 		}
 	}
 	return out, nil
+}
+
+func emitEvent(emit func(StreamEvent) error, event StreamEvent) error {
+	if emit == nil {
+		return nil
+	}
+	return emit(event)
 }
 
 func valueOrManual(value string) string {
@@ -259,6 +308,51 @@ func (s *Service) runComposeUp(ctx context.Context, stack *model.CCMStack, deplo
 	results = append(results, res)
 	if res.ExitCode != 0 {
 		return results, fmt.Errorf("docker compose up failed: %s", commandErrSummary(res))
+	}
+	return results, nil
+}
+
+func (s *Service) runComposeUpStream(ctx context.Context, stack *model.CCMStack, deployPath string, emit func(StreamEvent) error) ([]model.CommandResult, error) {
+	remote, ok := s.ssh.(streamingRemoteClient)
+	if !ok {
+		return nil, fmt.Errorf("streaming deployment is not supported by the remote client")
+	}
+	results := []model.CommandResult{}
+	run := func(label, cmd string) error {
+		if err := emitEvent(emit, StreamEvent{Type: "command", Phase: "compose", Command: label}); err != nil {
+			return err
+		}
+		res, err := remote.StreamCommand(ctx, stack.TargetID, cmd, 10*time.Minute, func(stream, line string) error {
+			return emitEvent(emit, StreamEvent{Type: "output", Phase: "compose", Command: label, Stream: stream, Line: line})
+		})
+		if err != nil {
+			return err
+		}
+		results = append(results, res)
+		exitCode := res.ExitCode
+		if err := emitEvent(emit, StreamEvent{Type: "command_finished", Phase: "compose", Command: label, ExitCode: &exitCode}); err != nil {
+			return err
+		}
+		if res.ExitCode != 0 {
+			return fmt.Errorf("%s failed: %s", label, commandErrSummary(res))
+		}
+		return nil
+	}
+
+	if stack.Flags.Pull {
+		if err := run("docker compose pull", fmt.Sprintf("cd %q && docker compose pull", deployPath)); err != nil {
+			return results, err
+		}
+	}
+	up := "docker compose up -d"
+	if stack.Flags.RemoveOrphans {
+		up += " --remove-orphans"
+	}
+	if strings.EqualFold(stack.Flags.Recreate, "force") {
+		up += " --force-recreate"
+	}
+	if err := run(up, fmt.Sprintf("cd %q && %s", deployPath, up)); err != nil {
+		return results, err
 	}
 	return results, nil
 }

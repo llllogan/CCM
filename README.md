@@ -337,7 +337,31 @@ If your workflow uses only merged `env` (no `env_file`), the final `.env` is gen
   - files are written to `<deploy_subdir>/ccm_scripts/` with executable permissions.
 - `run_compose` optional boolean.
   - For non-`ccm` stacks, default is `true`.
-  - For `ccm` stack, default is `false` (write files only; use `POST /v1/compose/ccm/redeploy` to apply safely).
+- For `ccm` stack, default is `false` (write files only; use `POST /v1/compose/ccm/redeploy` to apply safely).
+
+### Streaming deployment output
+
+API callers that need live deployment output can send `Accept: text/event-stream` with
+`POST /v1/deploy`. CCM keeps the request open and emits Server-Sent Events as files
+are written and as `docker compose pull` and `docker compose up` produce output. The
+`data` field of each event is JSON; output events include `stream`, `command`, and
+`line` fields.
+
+The stream ends with a `complete` event whose `status` is either `succeeded` or
+`failed`. Once the stream has started, the HTTP status remains `200`, so callers
+must inspect that terminal event and fail their job when its status is `failed` or
+when the connection closes before a terminal event. Non-streaming callers continue
+to receive the normal JSON response.
+
+For example:
+
+```bash
+curl --no-buffer -sS \
+  -H 'Accept: text/event-stream' \
+  -H 'Content-Type: application/json' \
+  -X POST "$CCM_URL/v1/deploy" \
+  --data @ccm-deploy-payload.json
+```
 
 Reference payloads:
 
