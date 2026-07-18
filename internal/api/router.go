@@ -158,9 +158,24 @@ func (r *Router) uiRoute(w http.ResponseWriter, req *http.Request) {
 	if themed, ok := r.tpls[theme]; ok {
 		tpl = themed
 	}
-	if err := tpl.Execute(w, map[string]string{"Theme": theme}); err != nil {
+	if err := tpl.Execute(w, map[string]string{"Theme": theme, "ThemeColor": themeColor(theme)}); err != nil {
 		util.WriteErr(w, 500, "template render failed")
 		return
+	}
+}
+
+func themeColor(theme string) string {
+	switch theme {
+	case "vista":
+		return "#7899bc"
+	case "leopard":
+		return "#8fa1b9"
+	case "bloomi":
+		return "#000000"
+	case "nasa":
+		return "#171815"
+	default:
+		return "#008080"
 	}
 }
 

@@ -67,7 +67,7 @@ body.theme-nasa {
 }
 
 .theme-nasa .nasa-desktop {
-  padding: 16px;
+  --desktop-gutter: 16px;
   background:
     radial-gradient(circle at 15% 18%, rgba(255, 245, 220, 0.06) 0, rgba(255, 245, 220, 0) 22%),
     radial-gradient(circle at 84% 82%, rgba(255, 95, 46, 0.08) 0, rgba(255, 95, 46, 0) 22%),
@@ -82,10 +82,10 @@ body.theme-nasa {
 }
 
 .theme-nasa .nasa-console {
-  min-height: calc(100vh - 32px);
-  min-height: calc(100dvh - 32px);
-  height: calc(100vh - 32px);
-  height: calc(100dvh - 32px);
+  min-height: calc(100vh - (var(--desktop-gutter) * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  min-height: calc(100dvh - (var(--desktop-gutter) * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  height: calc(100vh - (var(--desktop-gutter) * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  height: calc(100dvh - (var(--desktop-gutter) * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   border: 1px solid #5d5747;
   border-radius: 18px;
   overflow: hidden;
