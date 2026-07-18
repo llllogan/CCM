@@ -333,6 +333,7 @@ Health and inventory:
 
 - `GET /healthz`
 - `GET /v1/summary`
+- `GET /v1/updates/ccm` (compares the installed CCM image digest with GHCR)
 - `GET /v1/stacks`
 - `GET /v1/inventory`
 - `GET /v1/items/{id}/children`

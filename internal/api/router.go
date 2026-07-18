@@ -28,6 +28,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/runner"
 	"github.com/loganjanssen/ccm/internal/script"
 	ccmstatus "github.com/loganjanssen/ccm/internal/status"
+	"github.com/loganjanssen/ccm/internal/update"
 	"github.com/loganjanssen/ccm/internal/util"
 )
 
@@ -49,13 +50,14 @@ type Router struct {
 	restart *restart.Service
 	scripts *script.Service
 	status  *ccmstatus.Service
+	updates *update.Service
 	index   *template.Template
 	tpls    map[string]*template.Template
 	rawLogs []byte
 	themes  map[string]struct{}
 }
 
-func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, rr *runner.Service, dm *dockermaint.Service, ds *disk.Service, ns *network.Service, l *logs.Service, rs *restart.Service, ss *script.Service) http.Handler {
+func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c *control.Service, rr *runner.Service, dm *dockermaint.Service, ds *disk.Service, ns *network.Service, l *logs.Service, rs *restart.Service, ss *script.Service, us *update.Service) http.Handler {
 	root, err := fs.Sub(staticFS, "static")
 	if err != nil {
 		panic("static root missing")
@@ -97,6 +99,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 		restart: rs,
 		scripts: ss,
 		status:  ccmstatus.NewService(cfg, inv, rs, ss),
+		updates: us,
 		index:   index,
 		tpls:    tpls,
 		rawLogs: rawLogs,
@@ -108,6 +111,7 @@ func NewRouter(cfg *config.Config, inv *inventory.Service, d *deploy.Service, c 
 	mux.HandleFunc("/v1/stacks", r.stacks)
 	mux.HandleFunc("/v1/inventory", r.inventory)
 	mux.HandleFunc("/v1/summary", r.summary)
+	mux.HandleFunc("/v1/updates/ccm", r.ccmUpdate)
 	mux.HandleFunc("/v1/items/", r.itemChildren)
 	mux.HandleFunc("/v1/targets/", r.targetRoute)
 	mux.HandleFunc("/v1/containers/", r.containerRoute)
@@ -254,6 +258,14 @@ func (r *Router) summary(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	util.WriteJSON(w, 200, r.status.Summary(req.Context()))
+}
+
+func (r *Router) ccmUpdate(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		util.WriteErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	util.WriteJSON(w, http.StatusOK, r.updates.Status(req.Context()))
 }
 
 func (r *Router) itemChildren(w http.ResponseWriter, req *http.Request) {

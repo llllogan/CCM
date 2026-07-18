@@ -20,6 +20,7 @@ let logLines = [];
 let pendingLogLines = [];
 let logFlushTimer = null;
 let droppedLogLineCount = 0;
+let ccmUpdateAvailable = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -43,10 +44,24 @@ function updateSelectionControls() {
   $('btnStop').disabled = !(isRunner || isContainer);
   $('btnRestart').disabled = !(isRunner || isContainer);
   $('btnRedeploy').disabled = !(isCompose || isRunner);
-  $('btnRedeploy').textContent = isRunner ? 'Uninstall' : 'Redeploy';
+  $('btnRedeploy').textContent = isRunner ? 'Uninstall' : (isCompose && selected?.id === 'ccm' && ccmUpdateAvailable ? 'Update' : 'Redeploy');
   const logsTab = document.querySelector('[data-tab="logs"]');
   if (logsTab) logsTab.hidden = isRunner || isRunnerHost;
   if ((isRunner || isRunnerHost) && document.querySelector('.tab.active')?.dataset.tab === 'logs') switchTab('details');
+}
+
+async function fetchCCMUpdate({ silent = false } = {}) {
+  try {
+    const res = await fetch('/v1/updates/ccm');
+    if (!res.ok) throw new Error(`update check failed (${res.status})`);
+    const status = await res.json();
+    ccmUpdateAvailable = Boolean(status.available);
+    const statusLabel = $('ccmStatus');
+    if (statusLabel) statusLabel.textContent = ccmUpdateAvailable ? 'Update Available!' : 'CCM Ready';
+    updateSelectionControls();
+  } catch (err) {
+    if (!silent) setActionResult(`Update check failed: ${err?.message || String(err)}`, true);
+  }
 }
 
 function reconcileSelection() {
@@ -1037,7 +1052,8 @@ $('btnRedeploy').onclick = async () => {
   }
   const redeployURL = `/v1/compose/${encodeURIComponent(selected.id)}/redeploy`;
   try {
-    setActionResult('Redeploying...');
+    const isUpdate = selected.id === 'ccm' && ccmUpdateAvailable;
+    setActionResult(isUpdate ? 'Updating CCM...' : 'Redeploying...');
     const isCCMSelfRedeploy = selected.id === 'ccm';
     if (!isCCMSelfRedeploy) {
       showActionLogTab('Redeploy');
@@ -1126,12 +1142,16 @@ document.addEventListener('visibilitychange', () => {
   setInterval(tickClock, 1000);
   await fetchInventory({ silent: true, reconcile: false });
   await fetchStacks({ silent: true });
+  await fetchCCMUpdate({ silent: true });
   setInterval(() => {
     fetchInventory({ silent: true, reconcile: false });
   }, 4000);
   setInterval(() => {
     fetchStacks({ silent: true });
   }, 15000);
+  setInterval(() => {
+    fetchCCMUpdate({ silent: true });
+  }, 5 * 60 * 1000);
   setInterval(() => {
     if (selected?.type === 'compose') {
       fetchScheduledTasks(selected.id, { silent: true });

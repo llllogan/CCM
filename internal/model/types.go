@@ -288,6 +288,14 @@ type SystemSummary struct {
 	ScriptFailures  []ScriptTrackingEntry  `json:"script_failures"`
 }
 
+type CCMUpdateStatus struct {
+	Available     bool      `json:"available"`
+	CurrentDigest string    `json:"current_digest,omitempty"`
+	LatestDigest  string    `json:"latest_digest,omitempty"`
+	CheckedAt     time.Time `json:"checked_at"`
+	Error         string    `json:"error,omitempty"`
+}
+
 type NotificationConfig struct {
 	Clive CliveNotificationConfig `yaml:"clive" json:"clive"`
 }

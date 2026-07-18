@@ -26,6 +26,7 @@ import (
 	"github.com/loganjanssen/ccm/internal/script"
 	"github.com/loganjanssen/ccm/internal/sshx"
 	ccmstatus "github.com/loganjanssen/ccm/internal/status"
+	"github.com/loganjanssen/ccm/internal/update"
 )
 
 func main() {
@@ -72,6 +73,7 @@ func main() {
 	}
 	scriptSvc.Start(context.Background())
 	defer scriptSvc.Stop()
+	updateSvc := update.NewService(cfg, sshMgr)
 	statusSvc := ccmstatus.NewService(cfg, inv, restartSvc, scriptSvc)
 	notifySvc := notify.NewService(cfg.Notifications.Clive, statusSvc, logSvc)
 	notifySvc.Start(context.Background())
@@ -79,7 +81,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:         *listen,
-		Handler:      api.NewRouter(cfg, inv, deployer, controller, runnerSvc, dockerMaint, diskSvc, networkSvc, logSvc, restartSvc, scriptSvc),
+		Handler:      api.NewRouter(cfg, inv, deployer, controller, runnerSvc, dockerMaint, diskSvc, networkSvc, logSvc, restartSvc, scriptSvc, updateSvc),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
