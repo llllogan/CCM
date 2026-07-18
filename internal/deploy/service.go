@@ -257,7 +257,7 @@ func (s *Service) RedeployStack(ctx context.Context, stackID string) (map[string
 		"log_path":    logPath,
 	}
 	if notifier := s.notifierForStack(stack); notifier != nil {
-		message := fmt.Sprintf("CCM redeploy completed:\n    stack: %s\n    target: %s\n    path: %s\n    mode: %s", stackID, stack.TargetID, deployPath, map[bool]string{true: "async", false: "synchronous"}[async])
+		message := fmt.Sprintf("%s redeployed.\ntarget: %s\nstack: %s\npath: %s\nmode: %s", stackID, stack.TargetID, stackID, deployPath, map[bool]string{true: "async", false: "synchronous"}[async])
 		if err := notifier.Notify(ctx, message); err != nil {
 			out["notification"] = map[string]any{"status": "failed", "error": err.Error()}
 		} else {

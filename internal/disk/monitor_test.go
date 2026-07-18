@@ -71,7 +71,7 @@ func TestFormatAlertUsesBrisbaneTime(t *testing.T) {
 		Size:         "100G",
 		At:           time.Date(2026, time.July, 16, 5, 3, 33, 0, time.UTC),
 	})
-	want := "CCM disk alert:\n    host: host\n    path: /\n    mount: /\n    filesystem: /dev/x\n    usage: 81%\n    used: 81G\n    available: 19G\n    size: 100G\n    checked: 2026-07-16T15:03:33+10:00"
+	want := "host at 81% disk usage.\nused: 81G\navailable: 19G\nsize: 100G\nhost: host\npath: /\nmount: /\nfilesystem: /dev/x\nusage: 81%\nchecked: 15:03:33 2026-07-16"
 	if message != want {
 		t.Fatalf("message = %q, want %q", message, want)
 	}

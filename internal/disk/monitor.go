@@ -124,7 +124,7 @@ func (m *Monitor) evaluate(ctx context.Context) {
 }
 
 func formatAlert(u model.DiskUsage) string {
-	return fmt.Sprintf("CCM disk alert:\n    host: %s\n    path: %s\n    mount: %s\n    filesystem: %s\n    usage: %d%%\n    used: %s\n    available: %s\n    size: %s\n    checked: %s", u.TargetID, u.Path, u.Mountpoint, u.Filesystem, u.UsagePercent, u.Used, u.Available, u.Size, util.BrisbaneTime(u.At).Format(time.RFC3339))
+	return fmt.Sprintf("%s at %d%% disk usage.\nused: %s\navailable: %s\nsize: %s\nhost: %s\npath: %s\nmount: %s\nfilesystem: %s\nusage: %d%%\nchecked: %s", u.TargetID, u.UsagePercent, u.Used, u.Available, u.Size, u.TargetID, u.Path, u.Mountpoint, u.Filesystem, u.UsagePercent, util.BrisbaneTime(u.At).Format("15:04:05 2006-01-02"))
 }
 
 func (m *Monitor) isActive(targetID string) bool {

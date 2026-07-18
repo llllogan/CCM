@@ -254,20 +254,30 @@ CCM deployment completed:
     scripts: 0
 ```
 
+Redeploy notifications use this format:
+
+```text
+portfolio redeployed.
+target: app-host
+stack: portfolio
+path: /home/logan/portfolio
+mode: synchronous
+```
+
 Disk alerts include the host, filesystem, usage, capacity, and check time.
 Check times are always shown in Brisbane time (`Australia/Brisbane`):
 
 ```text
-CCM disk alert:
-    host: app-host
-    path: /
-    mount: /
-    filesystem: /dev/sda1
-    usage: 89%
-    used: 20G
-    available: 2.6G
-    size: 22G
-    checked: 2026-07-16T15:03:33+10:00
+app-host at 89% disk usage.
+used: 20G
+available: 2.6G
+size: 22G
+host: app-host
+path: /
+mount: /
+filesystem: /dev/sda1
+usage: 89%
+checked: 15:03:33 2026-07-16
 ```
 
 Disk alerts are sent once when usage rises above 80%. A new alert is sent
