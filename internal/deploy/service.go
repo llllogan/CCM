@@ -165,7 +165,7 @@ func (s *Service) deploy(ctx context.Context, req model.DeployRequest, emit func
 		"image_prune":  cleanup,
 	}
 	if notifier := s.notifierForStack(stack); notifier != nil {
-		message := fmt.Sprintf("CCM deployment completed:\n    stack: %s\n    target: %s\n    path: %s\n    repo: %s\n    sha: %s\n    compose: %t\n    env_count: %d\n    scripts: %d", req.CCMStack, stack.TargetID, deployPath, valueOrManual(req.Repo), valueOrManual(req.SHA), runCompose, envCount, scriptCount)
+		message := fmt.Sprintf("%s deployed.\ntarget: %s\nstack: %s\npath: %s\nrepo: %s\nsha: %s\ncompose: %t\nenv_count: %d\nscripts: %d", req.CCMStack, stack.TargetID, req.CCMStack, deployPath, valueOrManual(req.Repo), valueOrManual(req.SHA), runCompose, envCount, scriptCount)
 		if err := notifier.Notify(ctx, message); err != nil {
 			out["notification"] = map[string]any{"status": "failed", "error": err.Error()}
 		} else {

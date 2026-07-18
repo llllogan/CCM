@@ -243,15 +243,15 @@ stacks:
 Deployment notifications use this format:
 
 ```text
-CCM deployment completed:
-    stack: portfolio
-    target: app-host
-    path: /home/logan/portfolio
-    repo: owner/repository
-    sha: git-commit-sha
-    compose: true
-    env_count: 2
-    scripts: 0
+portfolio deployed.
+target: app-host
+stack: portfolio
+path: /home/logan/portfolio
+repo: owner/repository
+sha: git-commit-sha
+compose: true
+env_count: 2
+scripts: 0
 ```
 
 Redeploy notifications use this format:

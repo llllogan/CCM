@@ -271,7 +271,7 @@ func TestDeployNotificationUsesReadableMultilineFormat(t *testing.T) {
 	if len(notifier.messages) != 1 {
 		t.Fatalf("notifications = %d, want 1", len(notifier.messages))
 	}
-	want := "CCM deployment completed:\n    stack: app\n    target: host\n    path: /srv/app\n    repo: owner/repo\n    sha: abc123\n    compose: true\n    env_count: 0\n    scripts: 0"
+	want := "app deployed.\ntarget: host\nstack: app\npath: /srv/app\nrepo: owner/repo\nsha: abc123\ncompose: true\nenv_count: 0\nscripts: 0"
 	if notifier.messages[0] != want {
 		t.Fatalf("message = %q, want %q", notifier.messages[0], want)
 	}
