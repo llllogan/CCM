@@ -1,5 +1,13 @@
 * { box-sizing: border-box; }
 
+:root {
+  --desktop-gutter: 14px;
+}
+
+html {
+  background: radial-gradient(circle at top left, var(--bg-radial-start) 0%, var(--bg) 45%, var(--bg-radial-end) 100%);
+}
+
 body {
   margin: 0;
   font-family: var(--font-ui);
@@ -11,14 +19,18 @@ body {
 .desktop-bg {
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 14px;
+  padding:
+    calc(var(--desktop-gutter) + env(safe-area-inset-top, 0px))
+    calc(var(--desktop-gutter) + env(safe-area-inset-right, 0px))
+    calc(var(--desktop-gutter) + env(safe-area-inset-bottom, 0px))
+    calc(var(--desktop-gutter) + env(safe-area-inset-left, 0px));
 }
 
 .window-shell {
-  min-height: calc(100vh - 28px);
-  min-height: calc(100dvh - 28px);
-  height: calc(100vh - 28px);
-  height: calc(100dvh - 28px);
+  min-height: calc(100vh - (var(--desktop-gutter) * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  min-height: calc(100dvh - (var(--desktop-gutter) * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  height: calc(100vh - (var(--desktop-gutter) * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  height: calc(100dvh - (var(--desktop-gutter) * 2) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
   background: var(--window);
   border: 2px solid;
   border-color: var(--line-light) var(--line-deep) var(--line-deep) var(--line-light);

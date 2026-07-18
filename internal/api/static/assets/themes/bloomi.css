@@ -64,7 +64,7 @@ body.theme-bloomi {
 }
 
 .theme-bloomi .desktop-bg {
-  padding: 4px;
+  --desktop-gutter: 4px;
   background:
     repeating-linear-gradient(
       0deg,

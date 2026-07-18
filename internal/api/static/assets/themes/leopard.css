@@ -65,7 +65,7 @@ body.theme-leopard {
 }
 
 .theme-leopard .desktop-bg {
-  padding: 20px;
+  --desktop-gutter: 20px;
 }
 
 .theme-leopard .leopard-window {
