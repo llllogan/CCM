@@ -64,6 +64,15 @@ type fakeImagePruner struct {
 	err     error
 }
 
+type fakeDeploymentNotifier struct {
+	messages []string
+}
+
+func (n *fakeDeploymentNotifier) Notify(_ context.Context, message string) error {
+	n.messages = append(n.messages, message)
+	return nil
+}
+
 func (f *fakeImagePruner) ImagePrune(_ context.Context, targetID string) (model.DockerMaintenanceResult, error) {
 	f.targets = append(f.targets, targetID)
 	return f.result, f.err
@@ -241,6 +250,30 @@ func TestDeployStreamStopsAfterPullFailure(t *testing.T) {
 	}
 	if len(pruner.targets) != 0 {
 		t.Fatalf("prune targets = %#v, want none", pruner.targets)
+	}
+}
+
+func TestDeployNotificationUsesReadableMultilineFormat(t *testing.T) {
+	remote := &fakeRemoteClient{}
+	notifier := &fakeDeploymentNotifier{}
+	service := newTestService(remote, &fakeImagePruner{}, "app")
+	service.SetNotifier(notifier)
+
+	_, err := service.Deploy(context.Background(), model.DeployRequest{
+		CCMStack:   "app",
+		Repo:       "owner/repo",
+		SHA:        "abc123",
+		ComposeYML: "services: {}",
+	})
+	if err != nil {
+		t.Fatalf("Deploy() error = %v", err)
+	}
+	if len(notifier.messages) != 1 {
+		t.Fatalf("notifications = %d, want 1", len(notifier.messages))
+	}
+	want := "CCM deployment completed:\n    stack: app\n    target: host\n    path: /srv/app\n    repo: owner/repo\n    sha: abc123\n    compose: true\n    env_count: 0\n    scripts: 0"
+	if notifier.messages[0] != want {
+		t.Fatalf("message = %q, want %q", notifier.messages[0], want)
 	}
 }
 

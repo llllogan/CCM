@@ -14,6 +14,7 @@ import (
 
 	"github.com/loganjanssen/ccm/internal/config"
 	"github.com/loganjanssen/ccm/internal/model"
+	"github.com/loganjanssen/ccm/internal/util"
 )
 
 const (
@@ -123,7 +124,7 @@ func (m *Monitor) evaluate(ctx context.Context) {
 }
 
 func formatAlert(u model.DiskUsage) string {
-	return fmt.Sprintf("CCM disk alert: host=%s path=%s mount=%s filesystem=%s usage=%d%% used=%s available=%s size=%s checked=%s", u.TargetID, u.Path, u.Mountpoint, u.Filesystem, u.UsagePercent, u.Used, u.Available, u.Size, u.At.Format(time.RFC3339))
+	return fmt.Sprintf("CCM disk alert:\n    host: %s\n    path: %s\n    mount: %s\n    filesystem: %s\n    usage: %d%%\n    used: %s\n    available: %s\n    size: %s\n    checked: %s", u.TargetID, u.Path, u.Mountpoint, u.Filesystem, u.UsagePercent, u.Used, u.Available, u.Size, util.BrisbaneTime(u.At).Format(time.RFC3339))
 }
 
 func (m *Monitor) isActive(targetID string) bool {

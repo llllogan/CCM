@@ -54,8 +54,26 @@ func TestMonitorAlertsOnCrossingAndRecovery(t *testing.T) {
 	if len(notifier.messages) != 2 {
 		t.Fatalf("notifications = %d, want 2", len(notifier.messages))
 	}
-	if got := notifier.messages[0]; got == "" || !containsAll(got, "host=host", "usage=81%", "available=19G") {
+	if got := notifier.messages[0]; got == "" || !containsAll(got, "host: host", "usage: 81%", "available: 19G") {
 		t.Fatalf("message = %q, missing useful disk details", got)
+	}
+}
+
+func TestFormatAlertUsesBrisbaneTime(t *testing.T) {
+	message := formatAlert(model.DiskUsage{
+		TargetID:     "host",
+		Path:         "/",
+		Mountpoint:   "/",
+		Filesystem:   "/dev/x",
+		UsagePercent: 81,
+		Used:         "81G",
+		Available:    "19G",
+		Size:         "100G",
+		At:           time.Date(2026, time.July, 16, 5, 3, 33, 0, time.UTC),
+	})
+	want := "CCM disk alert:\n    host: host\n    path: /\n    mount: /\n    filesystem: /dev/x\n    usage: 81%\n    used: 81G\n    available: 19G\n    size: 100G\n    checked: 2026-07-16T15:03:33+10:00"
+	if message != want {
+		t.Fatalf("message = %q, want %q", message, want)
 	}
 }
 

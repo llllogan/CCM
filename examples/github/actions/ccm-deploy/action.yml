@@ -137,7 +137,6 @@ runs:
         stream_error_file="$(mktemp)"
         trap 'rm -f "${stream_status_file}" "${stream_error_file}"' EXIT
 
-        echo "Streaming deployment output from CCM..."
         set +e
         curl -sS --no-buffer \
           -X POST "${ccm_endpoint}" \
@@ -152,27 +151,9 @@ runs:
                 data="${data# }"
                 type="$(printf '%s' "${data}" | jq -r '.type // empty' 2>/dev/null || true)"
                 case "${type}" in
-                  started)
-                    echo "[ccm] deployment started"
-                    ;;
-                  phase)
-                    phase="$(printf '%s' "${data}" | jq -r '.phase // "unknown"')"
-                    echo "[ccm] phase: ${phase}"
-                    ;;
-                  command)
-                    command="$(printf '%s' "${data}" | jq -r '.command // "unknown"')"
-                    echo "[ccm] running: ${command}"
-                    ;;
                   output)
-                    stream="$(printf '%s' "${data}" | jq -r '.stream // "output"')"
-                    command="$(printf '%s' "${data}" | jq -r '.command // "command"')"
                     line_text="$(printf '%s' "${data}" | jq -r '.line // ""')"
-                    echo "[${stream}] ${command}: ${line_text}"
-                    ;;
-                  command_finished)
-                    command="$(printf '%s' "${data}" | jq -r '.command // "command"')"
-                    exit_code="$(printf '%s' "${data}" | jq -r '.exit_code // "unknown"')"
-                    echo "[ccm] ${command} finished with exit ${exit_code}"
+                    printf '%s\n' "${line_text}"
                     ;;
                   complete)
                     result="$(printf '%s' "${data}" | jq -r '.status // "unknown"')"
@@ -181,17 +162,16 @@ runs:
                     if [ -n "${error}" ]; then
                       printf '%s' "${error}" > "${stream_error_file}"
                     fi
-                    echo "[ccm] deployment ${result}"
                     ;;
                   *)
-                    echo "[ccm] ${data}"
+                    :
                     ;;
                 esac
                 ;;
               event:*|'')
                 ;;
               *)
-                echo "[ccm] ${line}"
+                :
                 ;;
             esac
           done
@@ -214,6 +194,7 @@ runs:
           fi
           exit 1
         fi
+        echo "Deployment succeeded."
 
         if [ "${INPUT_RESTART_AFTER_DEPLOY}" != "true" ]; then
           exit 0
