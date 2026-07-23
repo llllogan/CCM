@@ -39,10 +39,13 @@ func (s *Service) Global(ctx context.Context) ([]model.InventoryRow, []model.Con
 	rows := make([]model.InventoryRow, 0)
 	containers := make([]model.Container, 0)
 	projects := make([]model.ComposeProject, 0)
+	knownStacks := map[string]bool{}
+	targetErrors := map[string]bool{}
 
 	for targetID := range s.cfg.Targets {
 		inv := s.targetInventory(ctx, targetID)
 		if inv.Err != "" {
+			targetErrors[targetID] = true
 			rows = append(rows, model.InventoryRow{
 				Type:     "target_error",
 				ID:       "err:" + targetID,
@@ -66,6 +69,9 @@ func (s *Service) Global(ctx context.Context) ([]model.InventoryRow, []model.Con
 		}
 		for _, p := range inv.Projects {
 			projects = append(projects, p)
+			if _, ok := s.cfg.Stacks[p.ID]; ok {
+				knownStacks[p.ID] = true
+			}
 			rows = append(rows, model.InventoryRow{
 				Type:     "compose",
 				ID:       p.ID,
@@ -79,20 +85,41 @@ func (s *Service) Global(ctx context.Context) ([]model.InventoryRow, []model.Con
 			rows = append(rows, model.InventoryRow{Type: "github_runner_host", ID: h.ID, Name: h.Name, TargetID: h.TargetID, Status: h.Status, Count: len(h.Runners)})
 		}
 	}
+	// Keep configured stacks visible while Compose is recreating them or when a
+	// stack has no running containers. The stack ID remains the stable UI key.
+	for stackID, stack := range s.cfg.Stacks {
+		if stack == nil || knownStacks[stackID] {
+			continue
+		}
+		status := "missing"
+		if targetErrors[stack.TargetID] {
+			status = "unknown"
+		}
+		rows = append(rows, model.InventoryRow{
+			Type:     "compose",
+			ID:       stackID,
+			Name:     filepath.Base(stack.DeploySubdir),
+			TargetID: stack.TargetID,
+			Status:   status,
+		})
+	}
 
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 	return rows, containers, projects
 }
 
-func (s *Service) ProjectChildren(ctx context.Context, id string) []model.Container {
+func (s *Service) ProjectChildren(ctx context.Context, id string) ([]model.Container, bool) {
 	_, containers, projects := s.Global(ctx)
 	_ = containers
 	for _, p := range projects {
 		if p.ID == id {
-			return p.Containers
+			return p.Containers, true
 		}
 	}
-	return nil
+	if _, ok := s.cfg.Stacks[id]; ok {
+		return []model.Container{}, true
+	}
+	return nil, false
 }
 
 func (s *Service) RunnerChildren(ctx context.Context, id string) []model.Runner {

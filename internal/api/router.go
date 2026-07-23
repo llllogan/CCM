@@ -274,8 +274,8 @@ func (r *Router) itemChildren(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	id := strings.TrimSuffix(strings.TrimPrefix(req.URL.Path, "/v1/items/"), "/children")
-	cs := r.inv.ProjectChildren(req.Context(), id)
-	if cs != nil {
+	cs, ok := r.inv.ProjectChildren(req.Context(), id)
+	if ok {
 		util.WriteJSON(w, 200, cs)
 		return
 	}

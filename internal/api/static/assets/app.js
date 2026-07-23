@@ -1,5 +1,6 @@
 let inventory = [];
 let selected = null;
+let selectionRevision = 0;
 let stream = null;
 let streamContainerID = null;
 let paused = false;
@@ -25,6 +26,7 @@ let ccmUpdateAvailable = false;
 const $ = (id) => document.getElementById(id);
 
 function resetSelectionUI() {
+  selectionRevision += 1;
   selected = null;
   stopLogs();
   setScheduledTabVisible(false);
@@ -87,6 +89,37 @@ function reconcileSelection() {
     if (cached) selected = { ...selected, name: cached.runner_name || cached.name, status: cached.status };
     return;
   }
+  if (selected.type === 'compose') {
+    const byID = inventory.find((i) => i.id === selected.id && i.type === 'compose');
+    const metadata = stacksByID[selected.id];
+    const current = byID ? {
+      ...byID,
+      // /v1/stacks is the authoritative configured location. Inventory can
+      // briefly be served from the old target while its cache expires.
+      ...(metadata?.target_id ? { target_id: metadata.target_id } : {}),
+    } : (metadata ? {
+      type: 'compose',
+      id: selected.id,
+      name: metadata.deploy_path ? String(metadata.deploy_path).split('/').pop() : selected.name,
+      target_id: metadata.target_id,
+      status: 'transitioning',
+    } : null);
+    if (current) {
+      const targetChanged = selected.target_id !== current.target_id;
+      if (targetChanged) {
+        delete composeChildrenByID[selected.id];
+        delete scheduledTasksByStackID[selected.id];
+        clearDiskUsage();
+      }
+      selected = { ...selected, ...current };
+      updateSelectionControls();
+      return;
+    }
+    // Keep the view alive during a short Compose recreation window. A later
+    // inventory poll can still resolve the same logical stack.
+    selected = { ...selected, status: 'transitioning' };
+    return;
+  }
   const byID = inventory.find((i) => i.id === selected.id && i.type === selected.type);
   if (byID) {
     selected = byID;
@@ -136,6 +169,10 @@ async function fetchStacks({ silent = false } = {}) {
     (rows || []).forEach((row) => {
       if (row?.id) stacksByID[row.id] = row;
     });
+    if (selected?.type === 'compose') {
+      reconcileSelection();
+      renderItems();
+    }
     return true;
   } catch (err) {
     if (!silent) {
@@ -294,6 +331,7 @@ function renderItems() {
 }
 
 async function selectItem(item) {
+  const revision = ++selectionRevision;
   selected = item;
   updateSelectionControls();
   clearDiskUsage();
@@ -333,22 +371,46 @@ async function selectItem(item) {
     startLogs(c.id);
     switchTab('logs');
   } else if (item.type === 'compose') {
+    // The click may have come from a DOM row rendered before a redeploy moved
+    // the stack. Resolve the current target before making detail requests.
+    await fetchStacks({ silent: true });
+    await fetchInventory({ silent: true, reconcile: false });
+    if (revision !== selectionRevision) return;
+    const current = inventory.find((i) => i.type === 'compose' && i.id === item.id);
+    const metadata = stacksByID[item.id];
+    if (current) {
+      const currentTarget = metadata?.target_id || current.target_id;
+      if (currentTarget !== selected.target_id) {
+        delete composeChildrenByID[item.id];
+        delete scheduledTasksByStackID[item.id];
+      }
+      selected = { ...selected, ...current, target_id: currentTarget };
+    } else if (metadata) {
+      selected = { ...selected, target_id: metadata.target_id, status: 'transitioning' };
+    }
+    $('subtitle').textContent = selected.target_id;
+    $('status').textContent = selected.status;
     setScheduledTabVisible(true);
     if (!stacksByID[item.id]) {
       await fetchStacks({ silent: true });
     }
     const children = await ensureComposeChildren(item.id);
+    if (revision !== selectionRevision) return;
     const stackRow = stacksByID[item.id];
     renderStats([
       ['IP Address', 'Loading...'],
       ['Services', children.length],
-      ['Host machine', item.target_id],
-      ['Status', item.status],
+      ['Host machine', selected.target_id],
+      ['Status', selected.status],
       ['Stack ID', item.id],
     ], { restart: stackRow?.restart || null });
-    await fetchDiskUsage(item.target_id, item.id);
-    await fetchTargetIP(item.target_id, item.id);
-    $('details').textContent = JSON.stringify(children, null, 2);
+    await fetchDiskUsage(selected.target_id, item.id);
+    await fetchTargetIP(selected.target_id, item.id);
+    if (revision !== selectionRevision) return;
+    const stackTransitioning = children.length === 0 && ['missing', 'unknown', 'transitioning'].includes(selected.status);
+    $('details').textContent = stackTransitioning
+      ? 'Stack is transitioning or has no running services yet. Details will refresh automatically.'
+      : JSON.stringify(children, null, 2);
     await fetchScheduledTasks(item.id, { silent: true });
     renderScheduledTasks(item.id);
     stopLogs();
@@ -356,6 +418,7 @@ async function selectItem(item) {
   } else if (item.type === 'runner') {
     setScheduledTabVisible(false); stopLogs();
     const res = await fetch(`/v1/runners/${encodeURIComponent(item.id)}`);
+    if (revision !== selectionRevision) return;
     if (!res.ok) { $('details').textContent = `Failed to load runner details (${res.status})`; return; }
     const r = await res.json();
     renderRunnerDetails(r);
@@ -363,6 +426,7 @@ async function selectItem(item) {
   } else if (item.type === 'github_runner_host') {
     setScheduledTabVisible(false); stopLogs();
     const children = await ensureRunnerChildren(item.id);
+    if (revision !== selectionRevision) return;
     renderStats([['Runners', children.length], ['Host machine', item.target_id], ['Status', item.status]]);
     $('details').textContent = JSON.stringify(children, null, 2);
     await fetchDiskUsage(item.target_id, item.id, { itemType: 'github_runner_host' });
@@ -770,11 +834,23 @@ async function refreshSelectedDetails() {
   }
 
   if (selected.type === 'compose') {
+    const revision = selectionRevision;
     if (!stacksByID[selected.id]) {
       await fetchStacks({ silent: true });
     }
+    await fetchInventory({ silent: true, reconcile: false });
+    if (revision !== selectionRevision) return;
+    const current = inventory.find((i) => i.type === 'compose' && i.id === selected.id);
+    const metadata = stacksByID[selected.id];
+    if (current && current.target_id !== selected.target_id) {
+      delete composeChildrenByID[selected.id];
+      delete scheduledTasksByStackID[selected.id];
+    }
+    if (current) selected = { ...selected, ...current, ...(metadata?.target_id ? { target_id: metadata.target_id } : {}) };
+    else if (metadata) selected = { ...selected, target_id: metadata.target_id, status: 'transitioning' };
     delete composeChildrenByID[selected.id];
     const children = await ensureComposeChildren(selected.id);
+    if (revision !== selectionRevision) return;
     await fetchScheduledTasks(selected.id, { silent: true });
     const stackRow = stacksByID[selected.id];
     renderStats([
@@ -786,7 +862,10 @@ async function refreshSelectedDetails() {
     ], { restart: stackRow?.restart || null });
     await fetchDiskUsage(selected.target_id, selected.id, { silent: true });
     await fetchTargetIP(selected.target_id, selected.id, { silent: true });
-    $('details').textContent = JSON.stringify(children, null, 2);
+    const stackTransitioning = children.length === 0 && ['missing', 'unknown', 'transitioning'].includes(selected.status);
+    $('details').textContent = stackTransitioning
+      ? 'Stack is transitioning or has no running services yet. Details will refresh automatically.'
+      : JSON.stringify(children, null, 2);
     renderScheduledTasks(selected.id);
     return;
   }
@@ -1143,8 +1222,12 @@ document.addEventListener('visibilitychange', () => {
   await fetchInventory({ silent: true, reconcile: false });
   await fetchStacks({ silent: true });
   await fetchCCMUpdate({ silent: true });
-  setInterval(() => {
-    fetchInventory({ silent: true, reconcile: false });
+  setInterval(async () => {
+    const previousTarget = selected?.type === 'compose' ? selected.target_id : '';
+    await fetchInventory({ silent: true, reconcile: true });
+    if (selected?.type === 'compose' && selected.target_id !== previousTarget) {
+      await refreshSelectedDetails();
+    }
   }, 4000);
   setInterval(() => {
     fetchStacks({ silent: true });
